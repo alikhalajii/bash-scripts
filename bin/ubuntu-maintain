@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Probe-driven safe Ubuntu/Debian maintenance (apt, snap, flatpak).
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/ubuntu-maintain/common.sh
+source "${SCRIPT_DIR}/../lib/ubuntu-maintain/common.sh"
+
+um_parse_args "$@"
+um_setup_logging
+um_source_libs
+um_run_dag

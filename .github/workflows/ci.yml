@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        run: |
+          shellcheck -x bin/ubuntu-maintain update-script.sh tests/run-tests.sh
+          shellcheck -x lib/ubuntu-maintain/*.sh
+
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats
+        run: sudo apt-get update -qq && sudo apt-get install -y bats
+
+      - name: Run unit tests
+        run: ./tests/run-tests.sh
+
+  integration:
+    name: manifest (${{ matrix.ubuntu_version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu_version: ["18.04", "20.04", "22.04", "24.04"]
+    container: ubuntu:${{ matrix.ubuntu_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Smoke test manifest on Ubuntu ${{ matrix.ubuntu_version }}
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y --no-install-recommends apt-utils ca-certificates
+          chmod +x bin/ubuntu-maintain update-script.sh
+          ./bin/ubuntu-maintain --manifest-only
+          ./bin/ubuntu-maintain --manifest-only --with-topgrade

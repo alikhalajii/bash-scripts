@@ -1,0 +1,5 @@
+*.log
+.bats-cache/
+*.swp
+*~
+.DS_Store
