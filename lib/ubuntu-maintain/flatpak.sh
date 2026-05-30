@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# flatpak.sh — Flatpak update and optional monthly unused-app removal.
+# Provides: um_flatpak_phase
+# Sourced by: common.sh → um_source_libs
 
 um_flatpak_noninteractive_flags() {
   # Prefer --noninteractive; fall back to -y on older flatpak

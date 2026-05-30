@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# stability.sh — Post-apply health gate (failed units, reboot, needrestart, dpkg).
+# Provides: um_stability_gate
+# Sourced by: common.sh → um_source_libs
 
 um_stability_gate() {
   um_log ""

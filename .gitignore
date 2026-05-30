@@ -1,5 +1,18 @@
+# Logs and test artifacts
 *.log
 .bats-cache/
+
+# Editor / IDE
 *.swp
 *~
 .DS_Store
+.cursor/
+.vscode/
+*.code-workspace
+
+# Local tooling installs (e.g. bats via README one-liner)
+.local/
+
+# Compound Engineering workflow scratch
+docs/ideation/
+docs/plans/

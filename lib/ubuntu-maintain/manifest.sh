@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# manifest.sh — Print capability manifest and apt simulate summary.
+# Provides: um_manifest_print, um_manifest_apt_simulate_summary
+# Sourced by: common.sh → um_source_libs
 
 um_manifest_print() {
   um_log ""
@@ -78,9 +81,17 @@ um_manifest_count_apt_removals() {
 }
 
 um_manifest_apt_simulate_summary() {
-  local sim held_changes removals
-  sim="$(um_apt_simulate_upgrade 2>/dev/null || true)"
+  local sim held_changes removals sim_rc=0
+  sim="$(um_apt_simulate_upgrade 2>&1)" || sim_rc=$?
   UM_CAP[apt_simulate_output]="$sim"
+  UM_CAP[apt_simulate_failed]="$sim_rc"
+  if [[ "$sim_rc" -ne 0 ]]; then
+    um_log "  warning: apt simulate failed (exit ${sim_rc})"
+    if [[ "${UM_APPLY}" -eq 1 ]]; then
+      return "${UM_EXIT_APT}"
+    fi
+    return 0
+  fi
   removals="$(um_manifest_count_apt_removals "$sim")"
   UM_CAP[apt_simulated_removals]="$removals"
   held_changes="$(echo "$sim" | grep -ci 'held' || true)"

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# apt_module.sh — APT lock wait, upgrade tiers, simulate, and apply phase.
+# Provides: um_apt_phase, um_apt_run, um_apt_simulate_upgrade
+# Sourced by: common.sh → um_source_libs
 
 um_apt_lock_opts() {
   if [[ "${UM_CAP[apt_lock_timeout_supported]:-0}" -eq 1 ]]; then
@@ -20,8 +23,8 @@ um_apt_env() {
 um_apt_wait_locks() {
   if [[ "${UM_CAP[lock_wait_mode]:-}" == "fuser_poll" ]]; then
     um_log "Waiting for APT locks (fuser poll)..."
-    local path
-    while true; do
+    local path waited=0 max_wait="${UM_CAP[apt_lock_timeout]:-600}"
+    while [[ "$waited" -lt "$max_wait" ]]; do
       local held=0
       for path in "${UM_APT_LOCK_PATHS[@]}"; do
         if um_probe_command fuser && um_sudo fuser "$path" >/dev/null 2>&1; then
@@ -31,7 +34,12 @@ um_apt_wait_locks() {
       done
       if [[ "$held" -eq 0 ]]; then break; fi
       sleep 3
+      waited=$((waited + 3))
     done
+    if [[ "$waited" -ge "$max_wait" ]]; then
+      um_log "error: timed out after ${max_wait}s waiting for APT locks"
+      return "${UM_EXIT_APT}"
+    fi
     return 0
   fi
   um_log "Using DPkg::Lock::Timeout for apt locking"
@@ -94,7 +102,6 @@ um_apt_validate_sources_edge() {
 um_apt_phase() {
   [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]] || return 0
 
-  um_apt_env
   um_manifest_apt_simulate_summary
 
   if [[ "${UM_APPLY}" -eq 0 ]]; then
@@ -102,7 +109,7 @@ um_apt_phase() {
     return 0
   fi
 
-  um_apt_wait_locks
+  um_apt_wait_locks || return $?
   um_apt_validate_sources_edge
 
   um_log "Running apt-get update..."

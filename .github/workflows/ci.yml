@@ -16,7 +16,7 @@ jobs:
 
       - name: Run shellcheck
         run: |
-          shellcheck -x bin/ubuntu-maintain update-script.sh tests/run-tests.sh
+          shellcheck -x bin/ubuntu-maintain update-script.sh tests/run-tests.sh tests/ubuntu-maintain.bats
           shellcheck -x lib/ubuntu-maintain/*.sh
 
   bats:

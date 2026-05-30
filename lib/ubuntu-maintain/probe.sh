@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# probe.sh — Detect OS, package managers, apt locks, and preflight health.
+# Provides: um_run_probes, um_probe_*  (writes results to UM_CAP[])
+# Sourced by: common.sh → um_source_libs
 
 readonly UM_APT_LOCK_PATHS=(
   /var/lib/dpkg/lock
@@ -136,7 +139,7 @@ um_probe_health_preflight() {
   UM_CAP[reboot_required_preflight]=0
   if [[ -f /var/run/reboot-required ]]; then UM_CAP[reboot_required_preflight]=1; fi
   if um_probe_command systemctl; then
-    UM_CAP[failed_units_preflight]="$(systemctl --failed --no-legend --no-pager 2>/dev/null | wc -l | tr -d ' ')"
+    UM_CAP[failed_units_preflight]="$( (systemctl --failed --no-legend --no-pager 2>/dev/null || true) | wc -l | tr -d ' ')"
   else
     UM_CAP[failed_units_preflight]=0
   fi

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Shared state and helpers for ubuntu-maintain.
+# common.sh — Shared flags, exit codes, CLI parsing, and library loader.
+# Provides: um_parse_args, um_log, um_die, um_source_libs, UM_CAP state
+# Sourced by: bin/ubuntu-maintain (not executed directly)
 
 UM_VERSION="1.0.0"
 UM_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -92,6 +94,15 @@ Examples:
   ubuntu-maintain                    # dry-run manifest
   ubuntu-maintain --apply            # routine safe update
   ubuntu-maintain --apply --mode monthly --aggressive
+
+Exit codes:
+  0   success
+  2   stability issues after --apply (failed units, reboot required)
+  10  apt phase failed
+  11  snap phase failed
+  12  flatpak phase failed
+  13  topgrade phase failed
+  64  usage error (unknown flag, missing --mode value, not root for --apply)
 EOF
 }
 

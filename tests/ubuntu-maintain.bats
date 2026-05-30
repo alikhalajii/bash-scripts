@@ -25,6 +25,12 @@ setup() {
   [[ "$output" == *"DRY-RUN"* ]] || [[ "$output" == *"planned phases"* ]]
 }
 
+@test "default dry-run exits 0 without stability failure" {
+  run "${ROOT}/bin/ubuntu-maintain"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Stability gate skipped in dry-run"* ]]
+}
+
 @test "apt tier is standard by default" {
   um_load_os_release
   UM_AGGRESSIVE=0

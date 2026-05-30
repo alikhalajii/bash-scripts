@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# snap.sh — Snap refresh and optional monthly revision cleanup.
+# Provides: um_snap_phase
+# Sourced by: common.sh → um_source_libs
 
 um_snap_preflight_list() {
   LANG=C snap refresh --list 2>/dev/null || true

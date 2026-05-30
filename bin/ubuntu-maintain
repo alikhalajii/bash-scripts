@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Probe-driven safe Ubuntu/Debian maintenance (apt, snap, flatpak).
+# ubuntu-maintain — CLI entry: probe-driven Ubuntu/Debian maintenance (apt, snap, flatpak).
+# Run:     ./bin/ubuntu-maintain [--apply] [options]   (default: dry-run manifest)
+# Loads:   lib/ubuntu-maintain/* via common.sh
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

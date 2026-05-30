@@ -2,25 +2,35 @@
 
 Safe, probe-driven Ubuntu/Debian maintenance tooling.
 
+See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for runtime and development dependencies.
+
+**Repository layout:** `bin/` and `lib/ubuntu-maintain/` (tool), `tests/`, `docs/REQUIREMENTS.md`, `docs/solutions/` (operational learnings). Agent-oriented notes: [AGENTS.md](AGENTS.md).
+
 ## ubuntu-maintain
 
-Detects what is actually installed (apt, snap, flatpak), prints a **preflight manifest**, and by default runs in **dry-run** mode. Apply updates only when you pass `--apply`.
+Detects what is actually installed (apt, snap, flatpak), prints a **preflight manifest**, and by default runs in **dry-run** mode (no package changes). Use `--apply` to execute updates.
 
 ### Install
 
 ```bash
 chmod +x bin/ubuntu-maintain
-# Optional: add repo to PATH
-export PATH="/path/to/bash-scripts/bin:$PATH"
+export PATH="/path/to/bash-scripts/bin:$PATH"   # optional
+```
+
+### Quick start
+
+```bash
+./bin/ubuntu-maintain                    # manifest + planned actions (dry-run)
+sudo ./bin/ubuntu-maintain --apply       # routine safe update
 ```
 
 ### Usage
 
 ```bash
-# Manifest + simulate (no system changes)
+# Manifest + simulate (no package changes)
 ./bin/ubuntu-maintain
 
-# Routine safe update (standard apt tier, not dist-upgrade)
+# Routine safe update (standard apt tier — not dist-upgrade)
 sudo ./bin/ubuntu-maintain --apply
 
 # Monthly deep clean (autoremove, snap revs, flatpak unused)
@@ -28,67 +38,86 @@ sudo ./bin/ubuntu-maintain --apply --mode monthly
 
 # Allow package removals (dist-upgrade)
 sudo ./bin/ubuntu-maintain --apply --aggressive
+
+# Language/user tools via Topgrade (after system PMs)
+sudo ./bin/ubuntu-maintain --apply --with-topgrade
 ```
 
 ### Flags
 
-| Flag | Purpose |
-|------|---------|
-| `--apply` | Execute updates (default is dry-run) |
-| `--aggressive` | `apt-get dist-upgrade` tier |
-| `--mode daily\|monthly` | Hygiene depth |
-| `--manifest-only` | Print manifest and exit |
-| `--continue-on-pm-failure` | Continue if snap/flatpak fails after apt |
-| `--ignore-stability` | Do not exit on failed systemd units |
-| `--restart-services` | needrestart auto-restart (use with care) |
-| `--with-topgrade` | After apt/snap/flatpak, run [Topgrade](https://github.com/topgrade-rs/topgrade) for pip/cargo/npm/etc. |
+| Flag                       | Purpose                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `--apply`                  | Execute updates (default is dry-run)                                                             |
+| `--aggressive`             | `apt-get dist-upgrade` tier (may remove packages)                                                |
+| `--mode daily\|monthly`    | Hygiene depth (`daily` = upgrades only; `monthly` adds cleanup)                                  |
+| `--manifest-only`          | Print manifest and exit                                                                          |
+| `--with-topgrade`          | Run [Topgrade](https://github.com/topgrade-rs/topgrade) for pip/cargo/npm after apt/snap/flatpak |
+| `--continue-on-pm-failure` | Continue to later package managers if snap/flatpak/topgrade fails                                |
+| `--ignore-stability`       | Do not fail on failed systemd units after `--apply`                                              |
+| `--restart-services`       | Auto-restart services via needrestart (use with care)                                            |
+| `--log-file PATH`          | Log file (default: `/tmp/ubuntu-maintain.log`)                                                   |
 
-Logs append to `/tmp/ubuntu-maintain.log` (override with `--log-file`).
+Environment: `UPDATE_APPLY=1` is equivalent to `--apply`.
+
+### Exit codes
+
+| Code | Meaning                                                                       |
+| ---- | ----------------------------------------------------------------------------- |
+| 0    | Success                                                                       |
+| 2    | Stability issues after `--apply` (e.g. reboot required, failed systemd units) |
+| 10   | APT phase failed                                                              |
+| 11   | Snap phase failed                                                             |
+| 12   | Flatpak phase failed                                                          |
+| 13   | Topgrade phase failed                                                         |
+| 64   | Usage error (bad flag, missing value, or `--apply` without root/sudo)         |
+
+Dry-run (default, without `--apply`) exits **0** even if the system already has failed units; the stability gate runs only with `--apply`.
+
+### Safety model
+
+- **Dry-run by default** — review the manifest before `--apply`.
+- **Standard apt tier** — routine runs use `upgrade` (or `upgrade --with-new-pkgs` on 18.04–20.04), not `dist-upgrade`, unless `--aggressive`.
+- **Removal guard** — if simulate shows package removals and `--aggressive` is not set, apply aborts.
+- **Probe-driven** — only runs snap/flatpak/topgrade when those tools are present and have packages/remotes.
+- **Order** — apt → snap → flatpak → topgrade (optional) → stability gate (apply only).
+- **Coexists** with `unattended-upgrades`; does not delete apt lock files.
 
 ### Topgrade (optional)
 
-ubuntu-maintain owns **system** package managers (apt, snap, flatpak). For language and user-level tools, install Topgrade and pass `--with-topgrade`:
+ubuntu-maintain owns **system** package managers. Topgrade handles pip, cargo, npm, and similar user-level tools:
 
 ```bash
-# Install (pick one): cargo install topgrade | brew install topgrade | apt install topgrade
+# Install topgrade first, e.g. apt install topgrade  OR  cargo install topgrade
 sudo ./bin/ubuntu-maintain --apply --with-topgrade
 ```
 
-Topgrade runs with apt/snap/flatpak steps disabled so work is not duplicated.
+Apt/snap/flatpak steps are disabled inside Topgrade so work is not duplicated.
 
-### Design
+### Legacy wrapper
 
-- **Probe-driven**: capabilities from `apt-config`, `command -v`, snap/flatpak presence — not hardcoded Ubuntu version checks alone.
-- **APT**: `apt-get` only; `DPkg::Lock::Timeout` on 20.04+, fuser poll fallback on 18.04; four lock paths.
-- **Order**: apt → snap → flatpak → stability gate.
-- **Coexists** with `unattended-upgrades`; does not remove apt locks.
+`update-script.sh` runs `ubuntu-maintain --apply` for backward compatibility.
 
-### Legacy
+### Development
 
-`update-script.sh` now runs `ubuntu-maintain --apply` for backward compatibility.
+**Requirements:** [Bats](https://github.com/bats-core/bats-core) and [shellcheck](https://www.shellcheck.net/) — see [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
-### Tests
+Install Bats when `apt install bats` is not available:
 
 ```bash
-# Install bats: apt install bats
-./tests/run-tests.sh
+curl -fsSL https://github.com/bats-core/bats-core/tarball/v1.11.1 | tar -xz -C /tmp && /tmp/bats-core-*/install.sh "$HOME/.local" && export PATH="$HOME/.local/bin:$PATH"
+```
 
-# Static analysis
-shellcheck -x bin/ubuntu-maintain lib/ubuntu-maintain/*.sh
+Run checks:
+
+```bash
+./tests/run-tests.sh
+shellcheck -x bin/ubuntu-maintain lib/ubuntu-maintain/*.sh update-script.sh
 ```
 
 ### CI
 
-GitHub Actions runs **shellcheck**, **bats**, and an **Ubuntu 18.04–24.04** matrix (`--manifest-only` smoke tests) on push/PR.
-
-### Git
-
-```bash
-git init   # if not already a repo
-git add .
-git commit -m "feat: add probe-driven ubuntu-maintain with CI"
-```
+GitHub Actions: **shellcheck**, **bats** on `ubuntu-latest`, and **manifest smoke** on Ubuntu **18.04–24.04** containers.
 
 ### Supported systems
 
-Ubuntu/Debian **18.04–24.04** (18.04 best-effort, EOL warning in manifest).
+Ubuntu/Debian **18.04–24.04** (18.04 is best-effort; manifest shows an EOL warning).

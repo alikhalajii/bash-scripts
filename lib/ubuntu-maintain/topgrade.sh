@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+# topgrade.sh — Optional Topgrade pass for pip/cargo/npm (disables apt/snap/flatpak).
+# Provides: um_topgrade_phase, um_topgrade_disable_args
+# Sourced by: common.sh → um_source_libs
 
-# Topgrade handles language/user PMs; ubuntu-maintain owns apt/snap/flatpak.
 um_topgrade_disable_args() {
   # Step names vary by topgrade version; disable system package managers we already ran.
   local -a args=(--disable apt --disable snap --disable flatpak)
@@ -34,5 +36,5 @@ um_topgrade_phase() {
   if [[ "${UM_CONTINUE_ON_FAILURE}" -eq 1 ]]; then
     return 0
   fi
-  return 13
+  return "${UM_EXIT_TOPGRADE}"
 }
