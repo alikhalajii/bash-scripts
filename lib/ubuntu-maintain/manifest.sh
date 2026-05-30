@@ -3,6 +3,9 @@
 # Provides: um_manifest_print, um_manifest_apt_simulate_summary
 # Sourced by: common.sh → um_source_libs
 
+# Declared in common.sh; repeated here so shellcheck can infer the associative-array type.
+declare -gA UM_CAP
+
 um_manifest_print() {
   um_log ""
   um_log "=== Capability manifest ==="

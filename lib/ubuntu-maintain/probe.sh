@@ -3,6 +3,9 @@
 # Provides: um_run_probes, um_probe_*  (writes results to UM_CAP[])
 # Sourced by: common.sh → um_source_libs
 
+# Declared in common.sh; repeated here so shellcheck can infer the associative-array type.
+declare -gA UM_CAP
+
 readonly UM_APT_LOCK_PATHS=(
   /var/lib/dpkg/lock
   /var/lib/dpkg/lock-frontend

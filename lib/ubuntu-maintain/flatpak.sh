@@ -26,8 +26,7 @@ um_flatpak_phase() {
   fi
 
   local -a flags
-  # shellcheck disable=SC2206
-  flags=( $(um_flatpak_noninteractive_flags) )
+  IFS=' ' read -ra flags <<< "$(um_flatpak_noninteractive_flags)"
 
   um_log "Updating flatpak apps..."
   if ! flatpak update "${flags[@]}"; then

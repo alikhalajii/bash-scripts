@@ -7,29 +7,30 @@ UM_VERSION="1.0.0"
 UM_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UM_ROOT_DIR="$(cd "${UM_LIB_DIR}/../.." && pwd)"
 
-# Runtime flags (set by CLI)
-UM_APPLY=0
-UM_AGGRESSIVE=0
-UM_MODE="daily"          # daily | monthly
-UM_CONTINUE_ON_FAILURE=0
-UM_IGNORE_STABILITY=0
-UM_RESTART_SERVICES=0
+# Runtime flags (set by CLI); exported so sourced lib files and subshells see them.
+export UM_APPLY=0
+export UM_AGGRESSIVE=0
+export UM_MODE="daily"          # daily | monthly
+export UM_CONTINUE_ON_FAILURE=0
+export UM_IGNORE_STABILITY=0
+export UM_RESTART_SERVICES=0
 UM_LOG_FILE=""
 UM_LOG_FILE_EXPLICIT=0
-UM_MANIFEST_ONLY=0
-UM_WITH_TOPGRADE=0
+export UM_MANIFEST_ONLY=0
+export UM_WITH_TOPGRADE=0
 
-# Populated by probe
+# Populated by probe.
 declare -gA UM_CAP=()
 
-# Exit codes
-readonly UM_EXIT_OK=0
-readonly UM_EXIT_STABILITY=2
-readonly UM_EXIT_APT=10
-readonly UM_EXIT_SNAP=11
-readonly UM_EXIT_FLATPAK=12
-readonly UM_EXIT_TOPGRADE=13
-readonly UM_EXIT_USAGE=64
+# Exit codes — used by sourced lib files (dag.sh, stability.sh, etc.), not read inside common.sh.
+# shellcheck disable=SC2034
+{ readonly UM_EXIT_OK=0
+  readonly UM_EXIT_STABILITY=2
+  readonly UM_EXIT_APT=10
+  readonly UM_EXIT_SNAP=11
+  readonly UM_EXIT_FLATPAK=12
+  readonly UM_EXIT_TOPGRADE=13
+  readonly UM_EXIT_USAGE=64; }
 
 um_die() {
   echo "error: $*" >&2
@@ -158,7 +159,8 @@ um_setup_logging() {
     UM_LOG_FILE="/tmp/ubuntu-maintain.$(id -u).log"
   elif [[ -e "$UM_LOG_FILE" ]] && [[ ! -w "$UM_LOG_FILE" ]]; then
     # Only warn+fallback for explicitly-provided paths; the uid-based default is already safe.
-    local fallback="/tmp/ubuntu-maintain.$(id -u).log"
+    local fallback
+    fallback="/tmp/ubuntu-maintain.$(id -u).log"
     echo "warning: cannot append to ${UM_LOG_FILE}; using ${fallback}" >&2
     UM_LOG_FILE="$fallback"
   fi

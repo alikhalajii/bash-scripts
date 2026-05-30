@@ -7,9 +7,9 @@ setup() {
   source "${UM_LIB}/common.sh"
   source "${UM_LIB}/probe.sh"
   source "${UM_LIB}/manifest.sh"
-  UM_APPLY=0
-  UM_AGGRESSIVE=0
-  UM_MODE="daily"
+  export UM_APPLY=0
+  export UM_AGGRESSIVE=0
+  export UM_MODE="daily"
 }
 
 @test "help exits zero" {
@@ -27,24 +27,27 @@ setup() {
 }
 
 @test "manifest warns when preflight failed units on apply" {
-  UM_APPLY=1
-  UM_IGNORE_STABILITY=0
-  UM_CAP[failed_units_preflight]=2
-  UM_CAP[manifest_timestamp]="test"
-  UM_CAP[apt_available]=1
-  UM_CAP[apt_tier_selected]="standard"
-  UM_CAP[apt_upgrade_cmd]="apt-get upgrade -y"
-  UM_CAP[lock_wait_mode]="fuser_poll"
-  UM_CAP[apt_locks_held]=""
-  UM_CAP[apt_held_count]=0
-  UM_CAP[snap_available]=0
-  UM_CAP[snap_has_packages]=0
-  UM_CAP[topgrade_available]=0
-  UM_CAP[flatpak_available]=0
-  UM_CAP[flatpak_has_remotes]=0
-  UM_CAP[unattended_upgrades_active]="unknown"
-  UM_CAP[apt_daily_active]="unknown"
-  UM_CAP[reboot_required_preflight]=0
+  export UM_APPLY=1
+  export UM_IGNORE_STABILITY=0
+  # UM_CAP is declared as an assoc array in common.sh (sourced above); shellcheck cannot
+  # follow the dynamic source path so it flags keys as unset vars (SC2154).
+  # shellcheck disable=SC2154
+  { UM_CAP[failed_units_preflight]=2
+    UM_CAP[manifest_timestamp]="test"
+    UM_CAP[apt_available]=1
+    UM_CAP[apt_tier_selected]="standard"
+    UM_CAP[apt_upgrade_cmd]="apt-get upgrade -y"
+    UM_CAP[lock_wait_mode]="fuser_poll"
+    UM_CAP[apt_locks_held]=""
+    UM_CAP[apt_held_count]=0
+    UM_CAP[snap_available]=0
+    UM_CAP[snap_has_packages]=0
+    UM_CAP[topgrade_available]=0
+    UM_CAP[flatpak_available]=0
+    UM_CAP[flatpak_has_remotes]=0
+    UM_CAP[unattended_upgrades_active]="unknown"
+    UM_CAP[apt_daily_active]="unknown"
+    UM_CAP[reboot_required_preflight]=0; }
   run um_manifest_print
   [ "$status" -eq 0 ]
   [[ "$output" == *"stability gate will likely exit 2"* ]]
@@ -58,15 +61,15 @@ setup() {
 
 @test "apt tier is standard by default" {
   um_load_os_release
-  UM_AGGRESSIVE=0
-  UM_MODE="daily"
+  export UM_AGGRESSIVE=0
+  export UM_MODE="daily"
   um_probe_apt || true
   [ "${UM_CAP[apt_tier_selected]}" = "standard" ]
 }
 
 @test "apt tier is aggressive when flagged" {
   um_load_os_release
-  UM_AGGRESSIVE=1
+  export UM_AGGRESSIVE=1
   um_probe_apt || true
   [ "${UM_CAP[apt_tier_selected]}" = "aggressive" ]
 }
