@@ -45,6 +45,11 @@ um_manifest_print() {
   um_log "preflight health:"
   um_log "  reboot_required: ${UM_CAP[reboot_required_preflight]:-0}"
   um_log "  failed_units: ${UM_CAP[failed_units_preflight]:-0}"
+  if [[ "${UM_APPLY}" -eq 1 && "${UM_IGNORE_STABILITY}" -eq 0 ]]; then
+    if [[ "${UM_CAP[failed_units_preflight]:-0}" -gt 0 ]]; then
+      um_log "warning: stability gate will likely exit ${UM_EXIT_STABILITY} unless units are fixed or --ignore-stability is set"
+    fi
+  fi
 
   um_log ""
   um_log "planned phases:"
@@ -67,7 +72,11 @@ um_manifest_planned_phases() {
   if [[ "${UM_WITH_TOPGRADE}" -eq 1 && "${UM_CAP[topgrade_available]:-0}" -eq 1 ]]; then
     um_log "  - topgrade (language/user PMs)"
   fi
-  um_log "  - stability gate"
+  if [[ "${UM_APPLY}" -eq 1 ]]; then
+    um_log "  - stability gate"
+  else
+    um_log "  - stability gate (apply only)"
+  fi
   if [[ "${UM_APPLY}" -eq 0 ]]; then
     um_log ""
     um_log "DRY-RUN: no changes will be made. Use --apply to execute."

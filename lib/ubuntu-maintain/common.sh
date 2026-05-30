@@ -14,7 +14,8 @@ UM_MODE="daily"          # daily | monthly
 UM_CONTINUE_ON_FAILURE=0
 UM_IGNORE_STABILITY=0
 UM_RESTART_SERVICES=0
-UM_LOG_FILE="${UM_LOG_FILE:-/tmp/ubuntu-maintain.log}"
+UM_LOG_FILE=""
+UM_LOG_FILE_EXPLICIT=0
 UM_MANIFEST_ONLY=0
 UM_WITH_TOPGRADE=0
 
@@ -39,10 +40,25 @@ um_log() {
   echo "$*"
 }
 
+# Safety check: um_reexec_as_root_if_apply (bin/ubuntu-maintain) handles re-exec before um_run_dag
+# is ever reached, so EUID should always be 0 here under --apply. If not, die rather than
+# continuing as non-root (apt and snap operations would fail with cryptic permission errors).
 um_need_root() {
-  if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
-    um_die "root or sudo required for this operation"
+  [[ "${EUID:-$(id -u)}" -eq 0 ]] && return 0
+  um_die "--apply requires root; the script should have re-exec'd via sudo — run without 'sudo' prefix or run as root directly"
+}
+
+# Re-exec bin/ubuntu-maintain as root for --apply (prompts for password once).
+um_reexec_as_root_if_apply() {
+  [[ "${UM_APPLY}" -eq 1 ]] || return 0
+  [[ "${EUID:-$(id -u)}" -eq 0 ]] && return 0
+  if ! command -v sudo >/dev/null 2>&1; then
+    echo "error: --apply requires root privileges; install sudo or run as root" >&2
+    exit "${UM_EXIT_USAGE}"
   fi
+  # Do not use sudo -E or pass UM_LOG_FILE — root must use /tmp/ubuntu-maintain.0.log by default.
+  exec sudo env UPDATE_APPLY="${UPDATE_APPLY:-}" \
+    "${UM_ROOT_DIR}/bin/ubuntu-maintain" "$@"
 }
 
 um_sudo() {
@@ -84,7 +100,7 @@ Options:
   --continue-on-pm-failure  Continue if snap/flatpak fails after apt succeeds
   --ignore-stability      Do not fail on failed systemd units
   --restart-services      Auto-restart services (needrestart mode a); risky
-  --log-file PATH         Log file (default: /tmp/ubuntu-maintain.log)
+  --log-file PATH         Log file (default: /tmp/ubuntu-maintain.<uid>.log)
   -h, --help              Show this help
 
 Environment:
@@ -102,7 +118,7 @@ Exit codes:
   11  snap phase failed
   12  flatpak phase failed
   13  topgrade phase failed
-  64  usage error (unknown flag, missing --mode value, not root for --apply)
+  64  usage error (unknown flag, missing value, sudo unavailable, or auth failed)
 EOF
 }
 
@@ -125,6 +141,7 @@ um_parse_args() {
         shift
         UM_LOG_FILE="${1:-}"
         [[ -n "$UM_LOG_FILE" ]] || um_die "--log-file requires a path"
+        UM_LOG_FILE_EXPLICIT=1
         ;;
       -h|--help) um_usage; exit 0 ;;
       *) um_die "unknown option: $1" ;;
@@ -137,6 +154,14 @@ um_parse_args() {
 }
 
 um_setup_logging() {
+  if [[ "${UM_LOG_FILE_EXPLICIT}" -eq 0 ]]; then
+    UM_LOG_FILE="/tmp/ubuntu-maintain.$(id -u).log"
+  elif [[ -e "$UM_LOG_FILE" ]] && [[ ! -w "$UM_LOG_FILE" ]]; then
+    # Only warn+fallback for explicitly-provided paths; the uid-based default is already safe.
+    local fallback="/tmp/ubuntu-maintain.$(id -u).log"
+    echo "warning: cannot append to ${UM_LOG_FILE}; using ${fallback}" >&2
+    UM_LOG_FILE="$fallback"
+  fi
   exec > >(tee -a "$UM_LOG_FILE") 2>&1
   um_log "ubuntu-maintain ${UM_VERSION} — $(date -Is 2>/dev/null || date)"
   um_log "mode=${UM_MODE} apply=${UM_APPLY} aggressive=${UM_AGGRESSIVE}"

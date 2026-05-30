@@ -22,7 +22,32 @@ setup() {
   run "${ROOT}/bin/ubuntu-maintain" --manifest-only
   [ "$status" -eq 0 ]
   [[ "$output" == *"Capability manifest"* ]]
+  [[ "$output" == *"stability gate (apply only)"* ]]
   [[ "$output" == *"DRY-RUN"* ]] || [[ "$output" == *"planned phases"* ]]
+}
+
+@test "manifest warns when preflight failed units on apply" {
+  UM_APPLY=1
+  UM_IGNORE_STABILITY=0
+  UM_CAP[failed_units_preflight]=2
+  UM_CAP[manifest_timestamp]="test"
+  UM_CAP[apt_available]=1
+  UM_CAP[apt_tier_selected]="standard"
+  UM_CAP[apt_upgrade_cmd]="apt-get upgrade -y"
+  UM_CAP[lock_wait_mode]="fuser_poll"
+  UM_CAP[apt_locks_held]=""
+  UM_CAP[apt_held_count]=0
+  UM_CAP[snap_available]=0
+  UM_CAP[snap_has_packages]=0
+  UM_CAP[topgrade_available]=0
+  UM_CAP[flatpak_available]=0
+  UM_CAP[flatpak_has_remotes]=0
+  UM_CAP[unattended_upgrades_active]="unknown"
+  UM_CAP[apt_daily_active]="unknown"
+  UM_CAP[reboot_required_preflight]=0
+  run um_manifest_print
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"stability gate will likely exit 2"* ]]
 }
 
 @test "default dry-run exits 0 without stability failure" {

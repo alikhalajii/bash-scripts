@@ -2,9 +2,16 @@
 
 Safe, probe-driven Ubuntu/Debian maintenance tooling.
 
-See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for runtime and development dependencies.
+## Documentation
 
-**Repository layout:** `bin/` and `lib/ubuntu-maintain/` (tool), `tests/`, `docs/REQUIREMENTS.md`, `docs/solutions/` (operational learnings). Agent-oriented notes: [AGENTS.md](AGENTS.md).
+| Document                                           | Contents                                                                      |
+| -------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)       | Runtime dependencies, Bats and shellcheck setup                               |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Sudo prompt, log paths, apt repo errors, stability exit 2                     |
+| [docs/solutions/](docs/solutions/)                 | Operational learnings (e.g. apt locks across LTS); search by YAML frontmatter |
+| [AGENTS.md](AGENTS.md)                             | Short notes for coding agents working in this repo                            |
+
+**Layout:** `bin/ubuntu-maintain` (CLI), `lib/ubuntu-maintain/` (modules), `tests/`, `update-script.sh` (legacy `--apply` wrapper).
 
 ## ubuntu-maintain
 
@@ -21,7 +28,7 @@ export PATH="/path/to/bash-scripts/bin:$PATH"   # optional
 
 ```bash
 ./bin/ubuntu-maintain                    # manifest + planned actions (dry-run)
-sudo ./bin/ubuntu-maintain --apply       # routine safe update
+./bin/ubuntu-maintain --apply            # routine safe update (prompts for sudo password)
 ```
 
 ### Usage
@@ -30,8 +37,8 @@ sudo ./bin/ubuntu-maintain --apply       # routine safe update
 # Manifest + simulate (no package changes)
 ./bin/ubuntu-maintain
 
-# Routine safe update (standard apt tier — not dist-upgrade)
-sudo ./bin/ubuntu-maintain --apply
+# Routine safe update (standard apt tier — not dist-upgrade; prompts for sudo if needed)
+./bin/ubuntu-maintain --apply
 
 # Monthly deep clean (autoremove, snap revs, flatpak unused)
 sudo ./bin/ubuntu-maintain --apply --mode monthly
@@ -55,7 +62,7 @@ sudo ./bin/ubuntu-maintain --apply --with-topgrade
 | `--continue-on-pm-failure` | Continue to later package managers if snap/flatpak/topgrade fails                                |
 | `--ignore-stability`       | Do not fail on failed systemd units after `--apply`                                              |
 | `--restart-services`       | Auto-restart services via needrestart (use with care)                                            |
-| `--log-file PATH`          | Log file (default: `/tmp/ubuntu-maintain.log`)                                                   |
+| `--log-file PATH`          | Log file (default: `/tmp/ubuntu-maintain.<uid>.log`, e.g. `0` under sudo)                        |
 
 Environment: `UPDATE_APPLY=1` is equivalent to `--apply`.
 
@@ -69,7 +76,7 @@ Environment: `UPDATE_APPLY=1` is equivalent to `--apply`.
 | 11   | Snap phase failed                                                             |
 | 12   | Flatpak phase failed                                                          |
 | 13   | Topgrade phase failed                                                         |
-| 64   | Usage error (bad flag, missing value, or `--apply` without root/sudo)         |
+| 64   | Usage error (bad flag, missing value, sudo missing, or sudo auth failed)      |
 
 Dry-run (default, without `--apply`) exits **0** even if the system already has failed units; the stability gate runs only with `--apply`.
 
@@ -99,9 +106,7 @@ Apt/snap/flatpak steps are disabled inside Topgrade so work is not duplicated.
 
 ### Development
 
-**Requirements:** [Bats](https://github.com/bats-core/bats-core) and [shellcheck](https://www.shellcheck.net/) — see [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
-
-Install Bats when `apt install bats` is not available:
+Install Bats and shellcheck per **Documentation** above. When `apt install bats` is not available:
 
 ```bash
 curl -fsSL https://github.com/bats-core/bats-core/tarball/v1.11.1 | tar -xz -C /tmp && /tmp/bats-core-*/install.sh "$HOME/.local" && export PATH="$HOME/.local/bin:$PATH"

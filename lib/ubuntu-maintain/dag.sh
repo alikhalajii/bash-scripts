@@ -91,6 +91,10 @@ um_run_dag() {
   if [[ "${UM_APPLY}" -eq 1 ]]; then
     if [[ "$exit_code" -eq 0 ]]; then
       um_log "ubuntu-maintain completed successfully."
+    elif [[ "$exit_code" -eq "${UM_EXIT_STABILITY}" \
+        && "$apt_rc" -eq 0 && "$snap_rc" -eq 0 && "$flatpak_rc" -eq 0 && "$topgrade_rc" -eq 0 ]]; then
+      um_log "Package manager updates completed."
+      um_log "Stability gate reported issues (exit ${exit_code}). Fix failed units or re-run with --ignore-stability if they are expected."
     else
       um_log "ubuntu-maintain finished with errors (exit ${exit_code})."
     fi

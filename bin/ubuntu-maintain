@@ -8,7 +8,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/ubuntu-maintain/common.sh
 source "${SCRIPT_DIR}/../lib/ubuntu-maintain/common.sh"
 
-um_parse_args "$@"
+UM_CLI_ARGS=("$@")
+um_parse_args "${UM_CLI_ARGS[@]}"
+um_reexec_as_root_if_apply "${UM_CLI_ARGS[@]}"
 um_setup_logging
 um_source_libs
 um_run_dag
