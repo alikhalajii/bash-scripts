@@ -92,6 +92,7 @@ um_run_dag() {
   if [[ "${UM_APPLY}" -eq 1 ]]; then
     um_stability_gate || stab_rc=$?
     if [[ "$stab_rc" -ne 0 && "$exit_code" -eq 0 ]]; then exit_code="$stab_rc"; fi
+    # shellcheck disable=SC2154
     if [[ "$stab_rc" -eq 0 ]]; then
       UM_CAP[summary_stability]="OK"
     else
