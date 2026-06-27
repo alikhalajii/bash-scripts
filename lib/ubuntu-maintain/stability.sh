@@ -9,17 +9,15 @@ um_stability_gate() {
   local rc=0
 
   if um_probe_command dpkg; then
-    if ! dpkg --audit 2>/dev/null | grep -q .; then
-      :
-    else
+    if dpkg --audit 2>/dev/null | grep -q .; then
       um_log "Running dpkg --configure -a..."
-      um_sudo dpkg --configure -a || rc="${UM_EXIT_STABILITY}"
+      um_sudo dpkg --configure -a || { [[ "${UM_IGNORE_STABILITY}" -eq 0 ]] && rc="${UM_EXIT_STABILITY}"; }
     fi
   fi
 
   if [[ -f /var/run/reboot-required ]]; then
     um_log "REBOOT REQUIRED: $(cat /var/run/reboot-required 2>/dev/null || echo yes)"
-    rc="${UM_EXIT_STABILITY}"
+    if [[ "${UM_IGNORE_STABILITY}" -eq 0 ]]; then rc="${UM_EXIT_STABILITY}"; fi
   fi
 
   if um_probe_command systemctl; then

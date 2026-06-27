@@ -23,13 +23,14 @@ um_apt_env() {
 um_apt_wait_locks() {
   if [[ "${UM_CAP[lock_wait_mode]:-}" == "fuser_poll" ]]; then
     um_log "Waiting for APT locks (fuser poll)..."
-    local path waited=0 max_wait="${UM_CAP[apt_lock_timeout]:-600}"
+    local path waited=0 max_wait="${UM_CAP[apt_lock_timeout]:-120}"
     while [[ "$waited" -lt "$max_wait" ]]; do
       local held=0
       for path in "${UM_APT_LOCK_PATHS[@]}"; do
         if um_probe_command fuser && um_sudo fuser "$path" >/dev/null 2>&1; then
-          held=1
-          break
+          held=1; break
+        elif um_probe_command lsof && um_sudo lsof "$path" >/dev/null 2>&1; then
+          held=1; break
         fi
       done
       if [[ "$held" -eq 0 ]]; then break; fi
@@ -102,8 +103,6 @@ um_apt_validate_sources_edge() {
 um_apt_phase() {
   [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]] || return 0
 
-  um_manifest_apt_simulate_summary
-
   if [[ "${UM_APPLY}" -eq 0 ]]; then
     um_log "[dry-run] would run: apt-get update && apt-get $(um_apt_upgrade_args | tr '\n' ' ') -y"
     return 0
@@ -113,7 +112,7 @@ um_apt_phase() {
   um_apt_validate_sources_edge
 
   um_log "Running apt-get update..."
-  um_apt_run update -y || return "${UM_EXIT_APT}"
+  um_apt_run update || return "${UM_EXIT_APT}"
 
   um_manifest_apt_simulate_summary
   local removals="${UM_CAP[apt_simulated_removals]:-0}"
@@ -130,7 +129,9 @@ um_apt_phase() {
     um_apt_run autoremove --purge -y || return "${UM_EXIT_APT}"
     um_apt_run autoclean -y || return "${UM_EXIT_APT}"
     if um_probe_command dpkg; then
-      dpkg -l | awk '/^rc/ {print $2}' | xargs -r um_sudo dpkg --purge 2>/dev/null || true
+      dpkg -l | awk '/^rc/{print $2}' | while IFS= read -r pkg; do
+        um_sudo dpkg --purge -- "$pkg" 2>/dev/null || true
+      done
     fi
   fi
 
