@@ -28,8 +28,14 @@ um_topgrade_phase() {
     return 0
   fi
 
-  um_log "Running topgrade (apt/snap/flatpak disabled — already handled)..."
-  if topgrade -y "${disable_args[@]}"; then
+  local target_user="${SUDO_USER:-}"
+  if [[ -z "$target_user" || "$target_user" == "root" ]]; then
+    um_log "error: topgrade requires a non-root invoking user (SUDO_USER='${SUDO_USER:-}'); skipping phase"
+    return "${UM_EXIT_TOPGRADE}"
+  fi
+
+  um_log "Running topgrade as ${target_user} (apt/snap/flatpak disabled — already handled)..."
+  if sudo -u "$target_user" -i topgrade -y "${disable_args[@]}"; then
     return 0
   fi
   um_log "warning: topgrade exited non-zero"

@@ -10,6 +10,10 @@ um_run_dag() {
   um_run_probes
   um_manifest_print
 
+  if [[ "${UM_APPLY}" -eq 1 ]]; then
+    um_summary_init
+  fi
+
   if [[ "${UM_MANIFEST_ONLY}" -eq 1 ]]; then
     if [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]]; then
       um_manifest_apt_simulate_summary || um_log "note: apt simulate skipped or incomplete without root"
@@ -32,6 +36,8 @@ um_run_dag() {
       fi
     fi
   fi
+
+  um_summary_snapshot pre
 
   um_apt_phase || apt_rc=$?
   if [[ "$apt_rc" -ne 0 ]]; then
@@ -81,14 +87,23 @@ um_run_dag() {
     fi
   fi
 
+  um_summary_snapshot post
+
   if [[ "${UM_APPLY}" -eq 1 ]]; then
     um_stability_gate || stab_rc=$?
     if [[ "$stab_rc" -ne 0 && "$exit_code" -eq 0 ]]; then exit_code="$stab_rc"; fi
+    if [[ "$stab_rc" -eq 0 ]]; then
+      UM_CAP[summary_stability]="OK"
+    else
+      UM_CAP[summary_stability]="issues detected (exit ${stab_rc})"
+    fi
   else
     um_log "Stability gate skipped in dry-run (use --apply to verify system health)."
   fi
 
   if [[ "${UM_APPLY}" -eq 1 ]]; then
+    um_summary_print
+
     if [[ "$exit_code" -eq 0 ]]; then
       um_log "ubuntu-maintain completed successfully."
     elif [[ "$exit_code" -eq "${UM_EXIT_STABILITY}" \

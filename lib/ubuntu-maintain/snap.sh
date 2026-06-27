@@ -30,7 +30,7 @@ um_snap_phase() {
     LANG=C snap list --all 2>/dev/null | awk '/disabled/{print $1, $3}' | while read -r name rev; do
       [[ -n "$name" && -n "$rev" ]] || continue
       um_sudo snap remove "$name" --revision="$rev" 2>/dev/null || true
-    done
+    done || true
     um_sudo rm -rf /var/lib/snapd/cache/* 2>/dev/null || true
   fi
 

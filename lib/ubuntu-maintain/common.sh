@@ -58,7 +58,10 @@ um_reexec_as_root_if_apply() {
     exit "${UM_EXIT_USAGE}"
   fi
   # Do not use sudo -E or pass UM_LOG_FILE — root must use /tmp/ubuntu-maintain.0.log by default.
-  exec sudo env UPDATE_APPLY="${UPDATE_APPLY:-}" \
+  # Do not pass SUDO_USER — sudo sets it to the invoking user automatically; passing it
+  # would allow a caller to spoof the value by setting SUDO_USER in their environment.
+  exec sudo env PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+    UPDATE_APPLY="${UPDATE_APPLY:-}" \
     "${UM_ROOT_DIR}/bin/ubuntu-maintain" "$@"
 }
 
@@ -164,6 +167,7 @@ um_setup_logging() {
     echo "warning: cannot append to ${UM_LOG_FILE}; using ${fallback}" >&2
     UM_LOG_FILE="$fallback"
   fi
+  [[ -L "$UM_LOG_FILE" ]] && um_die "log path is a symlink — aborting to prevent symlink attack: $UM_LOG_FILE"
   exec > >(tee -a "$UM_LOG_FILE") 2>&1
   um_log "ubuntu-maintain ${UM_VERSION} — $(date -Is 2>/dev/null || date)"
   um_log "mode=${UM_MODE} apply=${UM_APPLY} aggressive=${UM_AGGRESSIVE}"
@@ -184,6 +188,8 @@ um_source_libs() {
   source "${UM_LIB_DIR}/stability.sh"
   # shellcheck source=topgrade.sh
   source "${UM_LIB_DIR}/topgrade.sh"
+  # shellcheck source=summary.sh
+  source "${UM_LIB_DIR}/summary.sh"
   # shellcheck source=dag.sh
   source "${UM_LIB_DIR}/dag.sh"
 }
