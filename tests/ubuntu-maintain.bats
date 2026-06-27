@@ -199,10 +199,10 @@ setup() {
 @test "summary module prints Update Summary block on apply" {
   source "${UM_LIB}/summary.sh"
   # shellcheck disable=SC2154
-  UM_CAP[apt_available]=0
-  UM_CAP[snap_has_packages]=0
-  UM_CAP[flatpak_has_remotes]=0
-  UM_CAP[summary_stability]="OK"
+  { UM_CAP[apt_available]=0
+    UM_CAP[snap_has_packages]=0
+    UM_CAP[flatpak_has_remotes]=0
+    UM_CAP[summary_stability]="OK"; }
   um_summary_init
   um_summary_snapshot pre
   um_summary_snapshot post
