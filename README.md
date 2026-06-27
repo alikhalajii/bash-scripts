@@ -15,7 +15,7 @@ Safe, probe-driven Ubuntu/Debian maintenance tooling.
 
 ## ubuntu-maintain
 
-Detects what is actually installed (apt, snap, flatpak), prints a **preflight manifest**, and by default runs in **dry-run** mode (no package changes). Use `--apply` to execute updates.
+Detects what is actually installed (apt, snap, flatpak), prints a **preflight manifest**, and by default runs in **dry-run** mode (no package changes). Use `--apply` to execute updates. After an apply run, a structured **Update Summary** is printed showing exactly what was installed, upgraded, and removed per package manager.
 
 ### Install
 
@@ -28,7 +28,7 @@ export PATH="/path/to/bash-scripts/bin:$PATH"   # optional
 
 ```bash
 ./bin/ubuntu-maintain                    # manifest + planned actions (dry-run)
-./bin/ubuntu-maintain --apply            # routine safe update (prompts for sudo password)
+./bin/ubuntu-maintain --apply            # routine safe update; prints Update Summary at end
 ```
 
 ### Usage
@@ -83,7 +83,7 @@ Dry-run (default, without `--apply`) exits **0** even if the system already has 
 ### Safety model
 
 - **Dry-run by default** — review the manifest before `--apply`.
-- **Standard apt tier** — routine runs use `upgrade` (or `upgrade --with-new-pkgs` on 18.04–20.04), not `dist-upgrade`, unless `--aggressive`.
+- **Standard apt tier** — routine runs use `upgrade` (or `upgrade --with-new-pkgs` on 20.04), not `dist-upgrade`, unless `--aggressive`.
 - **Removal guard** — if simulate shows package removals and `--aggressive` is not set, apply aborts.
 - **Probe-driven** — only runs snap/flatpak/topgrade when those tools are present and have packages/remotes.
 - **Order** — apt → snap → flatpak → topgrade (optional) → stability gate (apply only).
@@ -121,8 +121,8 @@ shellcheck -x bin/ubuntu-maintain lib/ubuntu-maintain/*.sh update-script.sh
 
 ### CI
 
-GitHub Actions: **shellcheck**, **bats** on `ubuntu-latest`, and **manifest smoke** on Ubuntu **18.04–24.04** containers.
+GitHub Actions: **shellcheck**, **bats** on `ubuntu-latest`, and **manifest smoke** on Ubuntu **20.04–24.04** containers.
 
 ### Supported systems
 
-Ubuntu/Debian **18.04–24.04** (18.04 is best-effort; manifest shows an EOL warning).
+Ubuntu/Debian **18.04–24.04** (18.04 is best-effort at runtime; manifest shows an EOL warning; CI matrix starts at 20.04 due to GitHub Actions Node.js compatibility).
