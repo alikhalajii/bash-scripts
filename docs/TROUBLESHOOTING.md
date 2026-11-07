@@ -4,15 +4,14 @@ Common issues when running `ubuntu-maintain`. For dependencies and development s
 
 ## `ubuntu-maintain: command not found`
 
-`bin/` is not on your PATH. Add it, or symlink the command (symlinks are resolved, so the rest of the repo is still found):
+The link in `~/.local/bin` is missing, or `~/.local/bin` is not on your PATH yet. Check both:
 
 ```bash
-export PATH="/path/to/ubuntu-maintain/bin:$PATH"
-# or
-ln -s /path/to/ubuntu-maintain/bin/ubuntu-maintain ~/.local/bin/ubuntu-maintain
+ls -l ~/.local/bin/ubuntu-maintain    # should point into your clone's bin/
+echo "$PATH" | tr ':' '\n' | grep -x "$HOME/.local/bin"
 ```
 
-A PATH change in `~/.bashrc` only applies to shells started afterwards. Run `source ~/.bashrc` or open a new terminal.
+Ubuntu's `~/.profile` adds `~/.local/bin` to PATH only if the folder existed when you logged in, so after creating it, log out and back in (or `export PATH="$HOME/.local/bin:$PATH"`). Opening a new terminal tab is not enough. The link can point anywhere: symlinks are resolved, so the rest of the clone is still found.
 
 ## sudo: "A terminal is required to authenticate" (exit 64)
 

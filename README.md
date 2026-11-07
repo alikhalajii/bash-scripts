@@ -4,31 +4,30 @@ Safe, probe-driven system updates for Ubuntu and Debian.
 
 `ubuntu-maintain` detects what is installed (apt, snap, flatpak, optionally topgrade), prints a manifest of what it found and what it plans to do, and **changes nothing unless you pass `--apply`**. After an apply run it checks system health and prints a summary of every package installed, upgraded, or removed.
 
-## Quick start
+## Install
+
+Needs Ubuntu 18.04+ or Debian, with `git` and `sudo`.
 
 ```bash
-git clone <repo-url> ubuntu-maintain
-cd ubuntu-maintain
-
-./bin/ubuntu-maintain            # dry run: manifest + planned actions, no changes
-./bin/ubuntu-maintain --apply    # apply updates (asks for your sudo password once)
+git clone https://github.com/alikhalajii/bash-scripts.git ~/.local/share/ubuntu-maintain
+mkdir -p ~/.local/bin
+ln -s ~/.local/share/ubuntu-maintain/bin/ubuntu-maintain ~/.local/bin/ubuntu-maintain
 ```
 
-You do not need to prefix `--apply` with `sudo`; the tool re-runs itself under sudo. It needs a real terminal for the password prompt.
+Ubuntu adds `~/.local/bin` to your PATH at login. If `ubuntu-maintain` is not found, log out and back in, or run `export PATH="$HOME/.local/bin:$PATH"`.
 
-### Run it from anywhere
-
-Either add `bin/` to your PATH (e.g. in `~/.bashrc`):
+## Use
 
 ```bash
-export PATH="/path/to/ubuntu-maintain/bin:$PATH"
+ubuntu-maintain            # dry run: shows what it found and would do, changes nothing
+ubuntu-maintain --apply    # apply updates (asks for your sudo password)
 ```
 
-or symlink the command:
+Run it as your normal user, not with `sudo` in front: `--apply` re-runs itself under sudo, and needs a real terminal for the password prompt.
 
-```bash
-ln -s /path/to/ubuntu-maintain/bin/ubuntu-maintain ~/.local/bin/ubuntu-maintain
-```
+- **Update:** `git -C ~/.local/share/ubuntu-maintain pull`
+- **Uninstall:** `rm ~/.local/bin/ubuntu-maintain && rm -rf ~/.local/share/ubuntu-maintain`
+- **Try without installing:** run `./bin/ubuntu-maintain` from any clone.
 
 ## What a run does
 
