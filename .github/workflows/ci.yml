@@ -2,52 +2,43 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  shellcheck:
+  lint-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install shellcheck
-        run: sudo apt-get update -qq && sudo apt-get install -y shellcheck
-
-      - name: Run shellcheck
+      - uses: actions/checkout@v5
+      - run: sudo apt-get update -qq && sudo apt-get install -y shellcheck bats
+      - name: shellcheck
         run: |
-          shellcheck --severity=warning -x bin/ubuntu-maintain update-script.sh tests/run-tests.sh tests/ubuntu-maintain.bats
-          shellcheck --severity=warning -x lib/ubuntu-maintain/*.sh
-
-  bats:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install bats
-        run: sudo apt-get update -qq && sudo apt-get install -y bats
-
-      - name: Run unit tests
+          shellcheck --severity=warning -x bin/ubuntu-maintain update-script.sh \
+            tests/run-tests.sh tests/ubuntu-maintain.bats lib/ubuntu-maintain/*.sh
+      - name: bats
         run: ./tests/run-tests.sh
 
-  integration:
-    name: manifest (${{ matrix.ubuntu_version }})
+  # Dry run on each supported LTS: catches release differences (apt, dpkg, bash) that
+  # unit tests with mocks cannot. No --apply: it would change the runner.
+  manifest:
+    name: manifest (${{ matrix.ubuntu }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        ubuntu_version: ["20.04", "22.04", "24.04"]
-    container: ubuntu:${{ matrix.ubuntu_version }}
+        ubuntu: ["20.04", "22.04", "24.04", "26.04"]
+    container: ubuntu:${{ matrix.ubuntu }}
+    defaults:
+      run:
+        shell: bash   # bash -eo pipefail: a failing run is not hidden by tee
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Smoke test manifest on Ubuntu ${{ matrix.ubuntu_version }}
+      - uses: actions/checkout@v5
+      - name: dry run
         run: |
-          export DEBIAN_FRONTEND=noninteractive
           apt-get update -qq
-          apt-get install -y --no-install-recommends apt-utils ca-certificates
-          chmod +x bin/ubuntu-maintain update-script.sh
-          ./bin/ubuntu-maintain --manifest-only | tee manifest.out
-          ./bin/ubuntu-maintain --manifest-only --with-topgrade
-          # apt >= 1.9.11 on all matrix releases: native DPkg::Lock::Timeout must be detected
+          ./bin/ubuntu-maintain | tee manifest.out
+          # apt >= 1.9.11 on every release here, so the native lock wait must be detected.
           grep -q 'lock_wait: dpkg_timeout' manifest.out

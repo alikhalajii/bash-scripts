@@ -109,7 +109,7 @@ By default the log is `/tmp/ubuntu-maintain.<uid>.log`. After `--apply` that is 
 
 ## Supported systems
 
-Ubuntu 18.04 and later, and Debian. CI tests Ubuntu 20.04, 22.04, and 24.04. 18.04 and 20.04 are past standard support and are best effort; the manifest shows a warning there.
+Ubuntu 18.04 and later, and Debian. CI tests Ubuntu 20.04, 22.04, 24.04, and 26.04. 18.04 and 20.04 are past standard support and are best effort; the manifest shows a warning there.
 
 Requires bash 4.4+ and `sudo` (for `--apply`). snap, flatpak, needrestart, and topgrade are optional. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
@@ -121,7 +121,7 @@ shellcheck --severity=warning -x bin/ubuntu-maintain update-script.sh \
   tests/run-tests.sh tests/ubuntu-maintain.bats lib/ubuntu-maintain/*.sh
 ```
 
-How to install bats and shellcheck: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md). CI (`.github/workflows/ci.yml`) runs shellcheck, the bats suite, and a manifest smoke test in Ubuntu 20.04–24.04 containers.
+How to install bats and shellcheck: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md). CI (`.github/workflows/ci.yml`) runs shellcheck, the bats suite, and a dry run in Ubuntu 20.04–26.04 containers.
 
 ### Repository layout
 

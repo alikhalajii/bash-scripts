@@ -117,7 +117,7 @@ Include in preflight manifest:
 ## When to Apply
 
 - Adding or changing apt phases in `lib/ubuntu-maintain/apt_module.sh` or similar tooling.
-- CI manifest smoke asserts `lock_wait: dpkg_timeout` on the 20.04–24.04 containers; keep that assertion when changing the probe.
+- CI asserts `lock_wait: dpkg_timeout` in the 20.04–26.04 containers; keep that assertion when changing the probe.
 - Debugging “script stuck waiting for APT” — check lock holder with `sudo lsof` on all four paths.
 
 ## Examples
