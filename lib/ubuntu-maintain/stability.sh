@@ -15,20 +15,28 @@ um_stability_gate() {
     fi
   fi
 
-  if [[ -f /var/run/reboot-required ]]; then
-    um_log "REBOOT REQUIRED: $(cat /var/run/reboot-required 2>/dev/null || echo yes)"
+  local reboot_file pkgs
+  reboot_file="$(um_reboot_required_file)"
+  if [[ -f "$reboot_file" ]]; then
+    pkgs=""; [[ -f "${reboot_file}.pkgs" ]] && pkgs="$(tr '\n' ' ' < "${reboot_file}.pkgs")"
+    um_log "REBOOT REQUIRED${pkgs:+ (packages: ${pkgs% })}"
+    if um_is_wsl; then um_log "  on WSL: run 'wsl --shutdown' on the host, then reopen the distro"; fi
     if [[ "${UM_IGNORE_STABILITY}" -eq 0 ]]; then rc="${UM_EXIT_STABILITY}"; fi
   fi
 
   if um_probe_command systemctl; then
-    local failed
-    failed="$(systemctl --failed --no-legend --no-pager 2>/dev/null || true)"
-    if [[ -n "$failed" ]]; then
+    um_classify_failed_units
+    local entry
+    if [[ ${#UM_FAILED_UNEXPECTED[@]} -gt 0 ]]; then
       um_log "Failed systemd units:"
-      echo "$failed"
+      printf '%s\n' "${UM_FAILED_UNEXPECTED[@]}"
       if [[ "${UM_IGNORE_STABILITY}" -eq 0 ]]; then rc="${UM_EXIT_STABILITY}"; fi
     else
-      um_log "No failed systemd units."
+      um_log "No ${UM_FAILED_EXPECTED[*]:+unexpected }failed systemd units."
+    fi
+    if [[ ${#UM_FAILED_EXPECTED[@]} -gt 0 ]]; then
+      um_log "Failed units expected in this environment (can be ignored):"
+      for entry in "${UM_FAILED_EXPECTED[@]}"; do um_log "  ${entry}"; done
     fi
   fi
 

@@ -4,12 +4,9 @@
 # Sourced by: common.sh → um_source_libs
 
 um_topgrade_disable_args() {
-  # Step names vary by topgrade version; disable system package managers we already ran.
-  local -a args=(--disable apt --disable snap --disable flatpak)
-  if topgrade --help 2>&1 | grep -q -- '--disable.*system'; then
-    args+=(--disable system)
-  fi
-  printf '%s\n' "${args[@]}"
+  # Disable the system package managers already handled. topgrade has no "apt" step
+  # (unknown step names are rejected and topgrade exits); apt runs inside "system".
+  printf '%s\n' --disable system --disable snap --disable flatpak
 }
 
 um_topgrade_phase() {
@@ -24,7 +21,7 @@ um_topgrade_phase() {
 
   if [[ "${UM_APPLY}" -eq 0 ]]; then
     um_log "[dry-run] would run: topgrade -n ${disable_args[*]}"
-    topgrade -n "${disable_args[@]}" 2>/dev/null || um_log "topgrade preview unavailable (install: cargo/brew/apt)"
+    topgrade -n "${disable_args[@]}" 2>/dev/null || um_log "topgrade preview unavailable (install via cargo or your package manager)"
     return 0
   fi
 
@@ -39,8 +36,6 @@ um_topgrade_phase() {
     return 0
   fi
   um_log "warning: topgrade exited non-zero"
-  if [[ "${UM_CONTINUE_ON_FAILURE}" -eq 1 ]]; then
-    return 0
-  fi
+  # Always report the failure; um_run_dag applies --continue-on-pm-failure uniformly.
   return "${UM_EXIT_TOPGRADE}"
 }

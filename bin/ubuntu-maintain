@@ -4,7 +4,8 @@
 # Loads:   lib/ubuntu-maintain/* via common.sh
 set -Eeuo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks so `ln -s .../bin/ubuntu-maintain ~/.local/bin/` still finds lib/.
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 # shellcheck source=../lib/ubuntu-maintain/common.sh
 source "${SCRIPT_DIR}/../lib/ubuntu-maintain/common.sh"
 

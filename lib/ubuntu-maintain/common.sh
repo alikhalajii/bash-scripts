@@ -38,7 +38,8 @@ um_die() {
 }
 
 um_log() {
-  echo "$*"
+  # printf, not echo: a message starting with -n/-e must print literally.
+  printf '%s\n' "$*"
 }
 
 # Safety check: um_reexec_as_root_if_apply (bin/ubuntu-maintain) handles re-exec before um_run_dag
@@ -56,6 +57,11 @@ um_reexec_as_root_if_apply() {
   if ! command -v sudo >/dev/null 2>&1; then
     echo "error: --apply requires root privileges; install sudo or run as root" >&2
     exit "${UM_EXIT_USAGE}"
+  fi
+  # Authenticate up front so a failed/cancelled password prompt exits 64 (documented),
+  # rather than whatever sudo returns from the exec below.
+  if ! sudo -n true 2>/dev/null; then
+    sudo -v || { echo "error: sudo authentication failed" >&2; exit "${UM_EXIT_USAGE}"; }
   fi
   # Do not use sudo -E or pass UM_LOG_FILE — root must use /tmp/ubuntu-maintain.0.log by default.
   # Do not pass SUDO_USER — sudo sets it to the invoking user automatically; passing it
@@ -83,7 +89,7 @@ um_load_os_release() {
 }
 
 um_parse_version_id() {
-  local v="${UM_CAP[os_version_id]}"
+  local v="${UM_CAP[os_version_id]:-}"
   v="${v%%.*}"
   [[ "$v" =~ ^[0-9]+$ ]] || v=0
   echo "$v"
@@ -101,8 +107,8 @@ Options:
   --mode daily|monthly    Hygiene depth (default: daily)
   --manifest-only         Print manifest and exit
   --with-topgrade         Run topgrade for pip/cargo/npm/etc. (disables apt/snap/flatpak)
-  --continue-on-pm-failure  Continue if snap/flatpak fails after apt succeeds
-  --ignore-stability      Do not fail on failed systemd units
+  --continue-on-pm-failure  Continue if snap/flatpak/topgrade fails (apt failure always stops)
+  --ignore-stability      Do not exit 2 on failed units, pending reboot, or dpkg errors
   --restart-services      Auto-restart services (needrestart mode a); risky
   --log-file PATH         Log file (default: /tmp/ubuntu-maintain.<uid>.log)
   -h, --help              Show this help
@@ -157,18 +163,36 @@ um_parse_args() {
   fi
 }
 
+# The default log lives in world-writable /tmp, so another local user could pre-create it
+# (as a symlink or a file they own) before root runs. Only trust it if it is ours.
+um_log_path_is_safe() {
+  local f="$1"
+  [[ ! -L "$f" ]] || return 1
+  [[ ! -e "$f" ]] || { [[ -O "$f" && -w "$f" ]]; }
+}
+
 um_setup_logging() {
-  if [[ "${UM_LOG_FILE_EXPLICIT}" -eq 0 ]]; then
-    UM_LOG_FILE="/tmp/ubuntu-maintain.$(id -u).log"
-  elif [[ -e "$UM_LOG_FILE" ]] && [[ ! -w "$UM_LOG_FILE" ]]; then
-    # Only warn+fallback for explicitly-provided paths; the uid-based default is already safe.
-    local fallback
-    fallback="/tmp/ubuntu-maintain.$(id -u).log"
-    echo "warning: cannot append to ${UM_LOG_FILE}; using ${fallback}" >&2
-    UM_LOG_FILE="$fallback"
+  local default_log
+  default_log="/tmp/ubuntu-maintain.$(id -u).log"
+  if [[ "${UM_LOG_FILE_EXPLICIT}" -eq 1 ]]; then
+    [[ -L "$UM_LOG_FILE" ]] && um_die "log path is a symlink — aborting to prevent symlink attack: $UM_LOG_FILE"
+    if [[ -e "$UM_LOG_FILE" ]] && [[ ! -w "$UM_LOG_FILE" ]]; then
+      echo "warning: cannot append to ${UM_LOG_FILE}; using ${default_log}" >&2
+      UM_LOG_FILE="$default_log"
+    fi
+  else
+    UM_LOG_FILE="$default_log"
   fi
-  [[ -L "$UM_LOG_FILE" ]] && um_die "log path is a symlink — aborting to prevent symlink attack: $UM_LOG_FILE"
-  exec > >(tee -a "$UM_LOG_FILE") 2>&1
+  if [[ "$UM_LOG_FILE" == "$default_log" ]] && ! um_log_path_is_safe "$default_log"; then
+    UM_LOG_FILE="$(mktemp "/tmp/ubuntu-maintain.$(id -u).XXXXXX")" || um_die "cannot create a log file in /tmp"
+    echo "warning: ${default_log} is a symlink or not owned by you; logging to ${UM_LOG_FILE}" >&2
+  fi
+  # Logs are readable only by the user running the final process. umask covers new files;
+  # chmod also tightens a default log left world-readable by an older version.
+  if [[ "${UM_LOG_FILE_EXPLICIT}" -eq 0 && -O "$UM_LOG_FILE" ]]; then
+    chmod 600 "$UM_LOG_FILE" 2>/dev/null || true
+  fi
+  exec > >(umask 077; exec tee -a "$UM_LOG_FILE") 2>&1
   um_log "ubuntu-maintain ${UM_VERSION} — $(date -Is 2>/dev/null || date)"
   um_log "mode=${UM_MODE} apply=${UM_APPLY} aggressive=${UM_AGGRESSIVE}"
 }

@@ -20,8 +20,10 @@ um_summary_snapshot() {
 
   # All snapshot files use normalized "name version" (space-separated, one per line, sorted).
   if [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]]; then
-    dpkg-query -W -f '${Package} ${Version}\n' 2>/dev/null \
-      | awk 'NF==2{print $1, $2}' \
+    # Installed packages only (status ii/hi). Config-only leftovers ("rc") are not
+    # installed, so purging them must not be reported as a removal.
+    dpkg-query -W -f '${db:Status-Abbrev} ${Package} ${Version}\n' 2>/dev/null \
+      | awk '$1 ~ /^[ih]i/ && NF==3 {print $2, $3}' \
       | sort > "${UM_SUMMARY_DIR}/${label}-apt" || true
   fi
 

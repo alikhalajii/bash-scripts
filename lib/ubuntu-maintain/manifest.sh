@@ -48,9 +48,12 @@ um_manifest_print() {
   um_log "preflight health:"
   um_log "  reboot_required: ${UM_CAP[reboot_required_preflight]:-0}"
   um_log "  failed_units: ${UM_CAP[failed_units_preflight]:-0}"
+  if [[ "${UM_CAP[failed_units_expected_preflight]:-0}" -gt 0 ]]; then
+    um_log "  failed_units_expected: ${UM_CAP[failed_units_expected_preflight]} (environment-specific, ignored by gate)"
+  fi
   if [[ "${UM_APPLY}" -eq 1 && "${UM_IGNORE_STABILITY}" -eq 0 ]]; then
-    if [[ "${UM_CAP[failed_units_preflight]:-0}" -gt 0 ]]; then
-      um_log "warning: stability gate will likely exit ${UM_EXIT_STABILITY} unless units are fixed or --ignore-stability is set"
+    if [[ "${UM_CAP[failed_units_preflight]:-0}" -gt 0 || "${UM_CAP[reboot_required_preflight]:-0}" -eq 1 ]]; then
+      um_log "warning: stability gate will likely exit ${UM_EXIT_STABILITY} (pending reboot or failed units) unless resolved or --ignore-stability is set"
     fi
   fi
 
@@ -63,6 +66,7 @@ um_manifest_print() {
 um_manifest_planned_phases() {
   if [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]]; then
     um_log "  - apt (${UM_CAP[apt_tier_selected]})"
+    if [[ "${UM_MODE}" == "monthly" ]]; then um_log "  - apt autoremove --purge, autoclean, purge residual configs (monthly)"; fi
   fi
   if [[ "${UM_CAP[snap_has_packages]:-0}" -eq 1 ]]; then
     um_log "  - snap refresh"
@@ -98,7 +102,8 @@ um_manifest_apt_simulate_summary() {
   UM_CAP[apt_simulate_output]="$sim"
   UM_CAP[apt_simulate_failed]="$sim_rc"
   if [[ "$sim_rc" -ne 0 ]]; then
-    um_log "  warning: apt simulate failed (exit ${sim_rc})"
+    um_log "  warning: apt simulate failed (exit ${sim_rc}); last output:"
+    printf '%s\n' "$sim" | tail -n 5 | sed 's/^/    /'
     if [[ "${UM_APPLY}" -eq 1 ]]; then
       return "${UM_EXIT_APT}"
     fi

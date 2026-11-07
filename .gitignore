@@ -1,18 +1,22 @@
-# Logs and test artifacts
+# Project ignore rules: only files this project's tooling or workflow creates.
+# Personal editor/OS files (.vscode/, .idea/, *.swp, .DS_Store, ...) belong in
+# your global ignore (~/.config/git/ignore), not here.
+# Leading "/" anchors a pattern to the repo root.
+
+# Logs (ubuntu-maintain --log-file, CI manifest output)
 *.log
-.bats-cache/
+/manifest.out
 
-# Editor / IDE
-*.swp
-*~
-.DS_Store
-.cursor/
-.vscode/
-*.code-workspace
+# Test artifacts
+/.bats-cache/
 
-# Local tooling installs (e.g. bats via README one-liner)
-.local/
+# Local tool installs into the repo (e.g. bats with a repo-local prefix)
+/.local/
 
-# Compound Engineering workflow scratch
-docs/ideation/
-docs/plans/
+# Agent tooling: personal settings stay local; a shared .claude/settings.json may be committed
+/.claude/settings.local.json
+/.claude/worktrees/
+
+# Local planning notes (not published)
+/docs/ideation/
+/docs/plans/

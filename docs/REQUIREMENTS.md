@@ -1,51 +1,48 @@
 # Requirements
 
-## Runtime (using ubuntu-maintain)
+## Running ubuntu-maintain
 
 | Requirement | Notes |
-|-------------|--------|
-| **bash** 4.4+ | Associative arrays (`declare -A`) |
-| **Debian or Ubuntu** | 18.04–24.04 (18.04 best-effort) |
-| **apt-get** | Always used on Debian/Ubuntu hosts |
-| **sudo or root** | Required for `--apply` (system package changes) |
-| **curl** | Optional; not required by the tool itself |
+| --- | --- |
+| Ubuntu 18.04+ or Debian | CI tests Ubuntu 20.04, 22.04, 24.04. 18.04 is best effort. |
+| bash 4.4+ | Uses associative arrays. |
+| apt-get, GNU coreutils | Present on every Ubuntu/Debian install. |
+| sudo, or running as root | Needed for `--apply` only. |
 
-Optional tools (probed; phases skipped if missing or empty):
+Optional. Each is detected at runtime, and its phase is skipped when it is missing or has nothing installed:
 
-- `snap`, `flatpak`, `needrestart`, `topgrade`
+- `snap`, `flatpak`: updated when present.
+- `needrestart`: reports services that need a restart; used by `--restart-services`.
+- `topgrade`: used by `--with-topgrade`.
+- `fuser` or `lsof`: lock polling on 18.04, whose apt cannot wait for locks itself.
 
-## Development and testing
+## Development
 
 | Tool | Purpose |
-|------|---------|
-| **[Bats](https://github.com/bats-core/bats-core)** (v1.11.1+) | Run `tests/ubuntu-maintain.bats` |
-| **[shellcheck](https://www.shellcheck.net/)** | Static analysis for shell scripts |
+| --- | --- |
+| [bats](https://github.com/bats-core/bats-core) 1.11+ | Runs `tests/ubuntu-maintain.bats` |
+| [shellcheck](https://www.shellcheck.net/) | Static analysis; CI fails on warnings |
 
-### Install Bats (curl, user-local)
-
-If `apt install bats` is unavailable (e.g. universe repo not enabled):
+Install both from the Ubuntu archive (universe):
 
 ```bash
-curl -fsSL https://github.com/bats-core/bats-core/tarball/v1.11.1 | tar -xz -C /tmp && /tmp/bats-core-*/install.sh "$HOME/.local" && export PATH="$HOME/.local/bin:$PATH"
+sudo apt install bats shellcheck
 ```
 
-Verify and run tests:
+If the `bats` package is unavailable, install it into `~/.local`:
 
 ```bash
-bats --version
-cd /path/to/bash-scripts
+curl -fsSL https://github.com/bats-core/bats-core/tarball/v1.11.1 | tar -xz -C /tmp
+/tmp/bats-core-*/install.sh "$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"   # add to ~/.bashrc to keep it
+```
+
+Run the checks from the repo root:
+
+```bash
 ./tests/run-tests.sh
+shellcheck --severity=warning -x bin/ubuntu-maintain update-script.sh \
+  tests/run-tests.sh tests/ubuntu-maintain.bats lib/ubuntu-maintain/*.sh
 ```
 
-Persist `PATH` (optional):
-
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-```
-
-### Install shellcheck
-
-```bash
-sudo apt install shellcheck
-# or: sudo snap install shellcheck
-```
+The tests do not need root and do not change the system.

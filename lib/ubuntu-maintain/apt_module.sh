@@ -5,7 +5,8 @@
 
 um_apt_lock_opts() {
   if [[ "${UM_CAP[apt_lock_timeout_supported]:-0}" -eq 1 ]]; then
-    echo "-o" "DPkg::Lock::Timeout=${UM_CAP[apt_lock_timeout]:-120}"
+    # One word per line: callers mapfile this into argv.
+    printf '%s\n' -o "DPkg::Lock::Timeout=${UM_CAP[apt_lock_timeout]:-120}"
   fi
 }
 
@@ -23,9 +24,11 @@ um_apt_env() {
 um_apt_wait_locks() {
   if [[ "${UM_CAP[lock_wait_mode]:-}" == "fuser_poll" ]]; then
     um_log "Waiting for APT locks (fuser poll)..."
-    local path waited=0 max_wait="${UM_CAP[apt_lock_timeout]:-120}"
-    while [[ "$waited" -lt "$max_wait" ]]; do
-      local held=0
+    local path held waited=0 max_wait="${UM_CAP[apt_lock_timeout]:-120}"
+    # Check before deciding on timeout, so locks freed on the last poll are not
+    # reported as a timeout.
+    while :; do
+      held=0
       for path in "${UM_APT_LOCK_PATHS[@]}"; do
         if um_probe_command fuser && um_sudo fuser "$path" >/dev/null 2>&1; then
           held=1; break
@@ -33,23 +36,24 @@ um_apt_wait_locks() {
           held=1; break
         fi
       done
-      if [[ "$held" -eq 0 ]]; then break; fi
+      [[ "$held" -eq 0 ]] && return 0
+      if [[ "$waited" -ge "$max_wait" ]]; then
+        um_log "error: timed out after ${max_wait}s waiting for APT locks"
+        return "${UM_EXIT_APT}"
+      fi
       sleep 3
       waited=$((waited + 3))
     done
-    if [[ "$waited" -ge "$max_wait" ]]; then
-      um_log "error: timed out after ${max_wait}s waiting for APT locks"
-      return "${UM_EXIT_APT}"
-    fi
-    return 0
   fi
   um_log "Using DPkg::Lock::Timeout for apt locking"
 }
 
+# No sudo here: --apply always runs as root (re-exec), and dry-run/simulate must work
+# unprivileged without prompting for a password.
 um_apt_run() {
   local -a opts
   mapfile -t opts < <(um_apt_lock_opts)
-  um_sudo env DEBIAN_FRONTEND=noninteractive \
+  env DEBIAN_FRONTEND=noninteractive \
     NEEDRESTART_MODE="${NEEDRESTART_MODE:-}" \
     NEEDRESTART_SUSPEND="${NEEDRESTART_SUSPEND:-}" \
     apt-get "${opts[@]}" "$@"
@@ -83,45 +87,37 @@ um_apt_simulate_upgrade() {
 um_apt_apply_upgrade() {
   local -a upgrade_args
   mapfile -t upgrade_args < <(um_apt_upgrade_args)
-  um_apt_run "${upgrade_args[@]}" -y
-}
-
-um_apt_validate_sources_edge() {
-  local edge_file="/etc/apt/sources.list.d/microsoft-edge.list"
-  [[ -f "$edge_file" ]] || return 0
-  if grep -q "dl.google.com/linux/chrome" "$edge_file" 2>/dev/null; then
-    um_log "Fixing known-bad microsoft-edge.list (Chrome URL)"
-    if command -v microsoft-edge >/dev/null 2>&1; then
-      echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" | \
-        um_sudo tee "$edge_file" >/dev/null
-    else
-      um_sudo rm -f "$edge_file"
-    fi
-  fi
+  # Non-interactive run: keep locally modified conffiles (same policy as unattended-upgrades)
+  # instead of blocking on, or failing at, a dpkg conffile prompt.
+  um_apt_run -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+    "${upgrade_args[@]}" -y
 }
 
 um_apt_phase() {
   [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]] || return 0
 
   if [[ "${UM_APPLY}" -eq 0 ]]; then
-    um_log "[dry-run] would run: apt-get update && apt-get $(um_apt_upgrade_args | tr '\n' ' ') -y"
+    um_log "[dry-run] would run: apt-get update && apt-get $(um_apt_upgrade_args | paste -sd ' ') -y"
+    if [[ "${UM_MODE}" == "monthly" ]]; then
+      um_log "[dry-run] would run: apt-get autoremove --purge -y && apt-get autoclean -y, and purge residual configs (dpkg 'rc')"
+    fi
     return 0
   fi
 
   um_apt_wait_locks || return $?
-  um_apt_validate_sources_edge
 
   um_log "Running apt-get update..."
   um_apt_run update || return "${UM_EXIT_APT}"
 
-  um_manifest_apt_simulate_summary
+  # Re-simulate against fresh lists; the removal guard below must not use a stale count.
+  um_manifest_apt_simulate_summary || return "${UM_EXIT_APT}"
   local removals="${UM_CAP[apt_simulated_removals]:-0}"
   if [[ "$removals" -gt 0 && "${UM_AGGRESSIVE}" -eq 0 ]]; then
     um_log "error: simulate shows ${removals} package removal(s); re-run with --aggressive"
     return "${UM_EXIT_APT}"
   fi
 
-  um_log "Running apt-get $(um_apt_upgrade_args | tr '\n' ' ')..."
+  um_log "Running apt-get $(um_apt_upgrade_args | paste -sd ' ')..."
   um_apt_apply_upgrade || return "${UM_EXIT_APT}"
 
   if [[ "${UM_MODE}" == "monthly" ]]; then

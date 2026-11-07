@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # probe.sh — Detect OS, package managers, apt locks, and preflight health.
-# Provides: um_run_probes, um_probe_*  (writes results to UM_CAP[])
+# Provides: um_run_probes, um_probe_*  (writes results to UM_CAP[]),
+#           um_is_wsl, um_reboot_required_file, um_classify_failed_units, um_unit_expected_failure
 # Sourced by: common.sh → um_source_libs
 
 # Declared in common.sh; repeated here so shellcheck can infer the associative-array type.
@@ -18,12 +19,16 @@ um_probe_command() {
   command -v "$cmd" >/dev/null 2>&1
 }
 
+# apt-config dump prints `Key "value";`. apt >= 1.9.11 (20.04+) ships the knob as a
+# binary-scoped default (`Binary::apt::DPkg::Lock::Timeout "120";`, case varies); an
+# operator-set unscoped `DPkg::Lock::Timeout` wins. Absent on apt 1.6 (18.04).
 um_probe_apt_config_timeout() {
   local raw
-  raw="$(apt-config dump 2>/dev/null | awk -F': ' '/^DPkg::Lock::Timeout / {gsub(/ /,"",$2); print $2; exit}')"
-  if [[ -z "$raw" ]]; then
-    raw="$(apt-config shell DPkg::Lock::Timeout 2>/dev/null | sed -n "s/^DPkg::Lock::Timeout=\"\\(.*\\)\";$/\\1/p")"
-  fi
+  raw="$(apt-config dump 2>/dev/null | awk '
+    { k = tolower($1); v = $2; gsub(/[";]/, "", v) }
+    k == "dpkg::lock::timeout"              { print v; found = 1; exit }
+    k ~ /::dpkg::lock::timeout$/ && s == "" { s = v }
+    END { if (!found && s != "") print s }')"
   if [[ -n "$raw" && "$raw" =~ ^-?[0-9]+$ ]]; then
     UM_CAP[apt_lock_timeout_supported]=1
     UM_CAP[apt_lock_timeout]="$raw"
@@ -109,9 +114,13 @@ um_probe_snap() {
     return 0
   fi
   UM_CAP[snap_available]=1
-  if LANG=C snap list 2>/dev/null | awk 'NR>1 {exit 0} END {exit 1}'; then
+  # Count rows after the header. (An awk `exit 0` still runs END, so an early-exit
+  # test with `END {exit 1}` always failed and snap was never detected.)
+  local count
+  count="$(LANG=C snap list 2>/dev/null | awk 'NR>1' | wc -l | tr -d ' ' || true)"
+  if [[ "${count:-0}" -gt 0 ]]; then
     UM_CAP[snap_has_packages]=1
-    UM_CAP[snap_count]="$(LANG=C snap list 2>/dev/null | awk 'NR>1' | wc -l | tr -d ' ')"
+    UM_CAP[snap_count]="$count"
   fi
 }
 
@@ -130,18 +139,76 @@ um_probe_flatpak() {
 
 um_probe_coexistence() {
   if um_probe_command systemctl; then
-    UM_CAP[unattended_upgrades_active]="$(systemctl is-active unattended-upgrades 2>/dev/null || echo unknown)"
-    UM_CAP[apt_daily_active]="$(systemctl is-active apt-daily.timer 2>/dev/null || echo unknown)"
+    UM_CAP[unattended_upgrades_active]="$(um_probe_unit_state unattended-upgrades)"
+    UM_CAP[apt_daily_active]="$(um_probe_unit_state apt-daily.timer)"
   fi
+}
+
+# `systemctl is-active` prints a state (e.g. "inactive") AND exits non-zero for
+# anything not active, so `|| echo unknown` would yield two lines. Take the first line.
+um_probe_unit_state() {
+  local state
+  state="$(systemctl is-active "$1" 2>/dev/null || true)"
+  state="${state%%$'\n'*}"
+  echo "${state:-unknown}"
+}
+
+# WSL_DISTRO_NAME is stripped by sudo, so also check the interop binfmt entry and the
+# WSL2 kernel release suffix. Only affects messages; the TPM rule keys on /dev/tpm*.
+um_is_wsl() {
+  [[ -n "${WSL_DISTRO_NAME:-}" ]] && return 0
+  [[ -e /proc/sys/fs/binfmt_misc/WSLInterop ]] && return 0
+  grep -q 'WSL' /proc/sys/kernel/osrelease 2>/dev/null
+}
+
+um_have_tpm_device() {
+  compgen -G '/dev/tpm*' >/dev/null
+}
+
+um_reboot_required_file() {
+  echo /var/run/reboot-required
+}
+
+# Echo a reason and return 0 when a unit's failure is expected in this environment
+# (its precondition is absent), so it should not trip the gate. Keyed on the missing
+# precondition, not on "is WSL", so the same rule covers VMs without a vTPM.
+um_unit_expected_failure() {
+  case "$1" in
+    tpm-udev.path|tpm-udev.service)
+      um_have_tpm_device && return 1
+      if um_is_wsl; then echo "WSL has no TPM device"; else echo "no TPM device (/dev/tpm*)"; fi
+      return 0 ;;
+  esac
+  return 1
+}
+
+# Split `systemctl --failed` into UM_FAILED_UNEXPECTED (lines) and
+# UM_FAILED_EXPECTED ("unit — reason" lines).
+um_classify_failed_units() {
+  UM_FAILED_UNEXPECTED=()
+  UM_FAILED_EXPECTED=()
+  local line unit reason
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    unit="$(awk '{print $1}' <<<"${line#*● }")"
+    if reason="$(um_unit_expected_failure "$unit")"; then
+      UM_FAILED_EXPECTED+=("${unit} — ${reason}")
+    else
+      UM_FAILED_UNEXPECTED+=("$line")
+    fi
+  done < <(systemctl --failed --no-legend --no-pager --plain 2>/dev/null || true)
 }
 
 um_probe_health_preflight() {
   UM_CAP[reboot_required_preflight]=0
-  if [[ -f /var/run/reboot-required ]]; then UM_CAP[reboot_required_preflight]=1; fi
+  if [[ -f "$(um_reboot_required_file)" ]]; then UM_CAP[reboot_required_preflight]=1; fi
   if um_probe_command systemctl; then
-    UM_CAP[failed_units_preflight]="$( (systemctl --failed --no-legend --no-pager 2>/dev/null || true) | wc -l | tr -d ' ')"
+    um_classify_failed_units
+    UM_CAP[failed_units_preflight]="${#UM_FAILED_UNEXPECTED[@]}"
+    UM_CAP[failed_units_expected_preflight]="${#UM_FAILED_EXPECTED[@]}"
   else
     UM_CAP[failed_units_preflight]=0
+    UM_CAP[failed_units_expected_preflight]=0
   fi
 }
 

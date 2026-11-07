@@ -42,13 +42,12 @@ um_run_dag() {
   um_apt_phase || apt_rc=$?
   if [[ "$apt_rc" -ne 0 ]]; then
     um_log "APT phase failed (exit ${apt_rc})"
-    exit_code="$apt_rc"
-    if [[ "${UM_CONTINUE_ON_FAILURE}" -eq 0 ]]; then
-      if [[ "${UM_APPLY}" -eq 1 ]]; then
-        um_stability_gate || stab_rc=$?
-      fi
-      return $(( exit_code != 0 ? exit_code : stab_rc ))
+    # An apt failure always stops the run; --continue-on-pm-failure only covers
+    # snap/flatpak/topgrade (see --help).
+    if [[ "${UM_APPLY}" -eq 1 ]]; then
+      um_stability_gate || true
     fi
+    return "$apt_rc"
   fi
 
   um_snap_phase || snap_rc=$?
@@ -110,7 +109,7 @@ um_run_dag() {
     elif [[ "$exit_code" -eq "${UM_EXIT_STABILITY}" \
         && "$apt_rc" -eq 0 && "$snap_rc" -eq 0 && "$flatpak_rc" -eq 0 && "$topgrade_rc" -eq 0 ]]; then
       um_log "Package manager updates completed."
-      um_log "Stability gate reported issues (exit ${exit_code}). Fix failed units or re-run with --ignore-stability if they are expected."
+      um_log "Stability gate reported issues (exit ${exit_code}). Reboot and/or fix the failed units listed above, or re-run with --ignore-stability if they are expected."
     else
       um_log "ubuntu-maintain finished with errors (exit ${exit_code})."
     fi

@@ -1,115 +1,94 @@
-# ubuntu-maintain Troubleshooting
+# Troubleshooting
 
-Common issues when running `ubuntu-maintain` or `update-script.sh`. For dependencies and development setup, see [REQUIREMENTS.md](REQUIREMENTS.md).
+Common issues when running `ubuntu-maintain`. For dependencies and development setup, see [REQUIREMENTS.md](REQUIREMENTS.md).
 
-## `--apply` and sudo
+## `ubuntu-maintain: command not found`
 
-`ubuntu-maintain --apply` (without leading `sudo`) **re-runs itself under sudo** and prompts for your password once. You do not need to prefix the command with `sudo` unless you prefer to.
-
-If `sudo` is not installed or authentication fails, the tool exits with code **64**.
-
-## Log file permission denied
-
-**Symptom:** `tee: /tmp/ubuntu-maintain.<uid>.log: Permission denied` at start of a run.
-
-**Cause:** Usually an old log file owned by another user (e.g. dry-run as UID 1000, then a root-owned process still pointed at `...1000.log`). Current versions pick the log path **after** sudo re-exec (root uses `/tmp/ubuntu-maintain.0.log`).
-
-**Fix:** Remove stale logs or use an explicit writable path:
+`bin/` is not on your PATH. Add it, or symlink the command (symlinks are resolved, so the rest of the repo is still found):
 
 ```bash
-rm -f /tmp/ubuntu-maintain.log /tmp/ubuntu-maintain.1000.log
-ubuntu-maintain --apply
-```
-
-Override with `--log-file PATH` (must be writable by the user running the final process, usually root after `--apply`).
-
-## Command not found
-
-**Symptom:** `ubuntu-maintain: command not found` outside the repo directory.
-
-**Fix:** Add `bin/` to your PATH or symlink the CLI:
-
-```bash
-export PATH="/path/to/bash-scripts/bin:$PATH"
+export PATH="/path/to/ubuntu-maintain/bin:$PATH"
 # or
-ln -sf /path/to/bash-scripts/bin/ubuntu-maintain ~/.local/bin/ubuntu-maintain
+ln -s /path/to/ubuntu-maintain/bin/ubuntu-maintain ~/.local/bin/ubuntu-maintain
 ```
 
-The script must stay in the repo layout (it loads `lib/ubuntu-maintain/` relative to `bin/`).
+A PATH change in `~/.bashrc` only applies to shells started afterwards. Run `source ~/.bashrc` or open a new terminal.
+
+## sudo: "A terminal is required to authenticate" (exit 64)
+
+`--apply` re-runs the tool under sudo, and sudo needs a terminal to ask for your password. This happens when the tool is started from something without one, such as an editor task, an agent, or a pipe. Run it from a normal terminal.
+
+For scheduled runs, start it as root (for example from root's crontab), so sudo is not needed.
+
+The tool also exits **64** if `sudo` is not installed or the password is wrong.
 
 ## APT phase failed (exit 10)
 
-**Symptom:** `APT phase failed (exit 10)` during `apt-get update` or upgrade.
+Almost always caused by a **broken third-party apt source**, not by ubuntu-maintain. The `apt-get update` output in the log names the failing source.
 
-**Cause:** Almost always a **broken third-party apt source**, not ubuntu-maintain.
-
-### Cursor repo hash mismatch
+**Hash sum mismatch** on one source: clear its cached lists and retry. Replace `<repo>` with the source name from the error:
 
 ```bash
-sudo rm -f /var/lib/apt/lists/*cursor* /var/lib/apt/lists/partial/*cursor*
+sudo rm -f /var/lib/apt/lists/*<repo>* /var/lib/apt/lists/partial/*<repo>*
 sudo apt-get clean && sudo apt-get update
 ```
 
-If it still fails, disable the repo until the vendor fixes the mirror:
+If it still fails, disable the source until its vendor fixes it, then re-enable it later:
 
 ```bash
-sudo mv /etc/apt/sources.list.d/cursor.sources /etc/apt/sources.list.d/cursor.sources.disabled
-sudo apt-get update && sudo ubuntu-maintain --apply
+sudo mv /etc/apt/sources.list.d/<repo>.sources /etc/apt/sources.list.d/<repo>.sources.disabled
 ```
 
-Use a `**.disabled**` suffix (not `.off`) so apt does not warn: `Ignoring file 'cursor.sources.off' … invalid filename extension`.
+Use the `.disabled` suffix. Other suffixes such as `.off` make apt warn about an invalid filename extension.
 
-Re-enable when `apt-get update` succeeds without errors.
+**Package removals:** if the log says `simulate shows N package removal(s)`, the upgrade would remove packages. Review the list with `apt-get -s dist-upgrade`, then re-run with `--aggressive` if that is acceptable.
 
-## Stability gate exit 2 after updates succeeded
+## Stability gate exit 2
 
-**Symptom:** Apt and/or flatpak completed, then:
+The updates finished, but the system is not healthy:
 
 ```text
 Stability gate: issues detected (exit 2)
-ubuntu-maintain finished with errors (exit 2).
 ```
 
-(or the newer message: *Package manager updates completed* + stability warning)
+The gate reports a pending reboot (`/var/run/reboot-required`), failed systemd units, or a failed `dpkg --configure -a`. The manifest's **preflight health** section shows the first two before you apply.
 
-**Cause:** Failed systemd units and/or `/var/run/reboot-required`. The manifest **preflight** `failed_units` count shows this before apply when `systemctl` is available.
+- **Reboot required:** reboot. On WSL, run `wsl --shutdown` on the host, then reopen the distro.
+- **Failed units:** check them with `systemctl status <unit>` and `journalctl -u <unit>`.
+- **Known failures unrelated to updates** (for example a third-party agent whose service is broken): add `--ignore-stability`.
 
-**Fix options:**
+Exit 2 is deliberate, so automation does not report an unhealthy system as green.
 
-1. Fix the failed services (e.g. `systemctl status <unit>`, vendor docs).
-2. If units are known-broken and unrelated to updates (common: Sophos `sav-protect`, `sav-rms`):
+**Units expected to fail are not counted.** When a unit fails because its precondition is missing, the gate lists it under *"Failed units expected in this environment (can be ignored)"* and does not exit 2. Currently this covers `tpm-udev.path` and `tpm-udev.service` when no `/dev/tpm*` exists (always on WSL, and on VMs without a virtual TPM). To add a case, extend `um_unit_expected_failure` in `lib/ubuntu-maintain/probe.sh`.
+
+## Log file warnings
+
+The default log is `/tmp/ubuntu-maintain.<uid>.log` (`.0.log` after `--apply`). If that path is a symlink or is owned by another user, the tool does not write to it. It logs to a new temporary file and prints a warning with the path. Removing the stale file fixes the warning:
 
 ```bash
-sudo ubuntu-maintain --apply --ignore-stability
+sudo rm -f /tmp/ubuntu-maintain.0.log
 ```
 
-Exit **2** is intentional without `--ignore-stability` so automation does not treat an unhealthy system as fully green.
+With `--log-file PATH`, the path must be writable by the user the run ends up as, which is root after `--apply`. A symlinked `--log-file` path is refused (exit 64).
 
-## Dry-run exits non-zero
+## topgrade phase failed (exit 13)
 
-**Symptom:** `./bin/ubuntu-maintain` exits 1 without `--apply`.
+- **"requires a non-root invoking user":** topgrade runs as the user who invoked sudo. Run `ubuntu-maintain --apply --with-topgrade` from your normal account, not from a root shell or root's crontab.
+- **Any other failure:** run `topgrade` yourself as your user to see the error.
 
-**Checks:**
+## Dry run exits non-zero
 
-- Ensure you are on a recent version (probe uses `(systemctl … || true) | wc -l` under `pipefail`).
-- Run with `bash -x ./bin/ubuntu-maintain` and note the last command before exit.
+A dry run should always exit 0. If it does not, run it with tracing and note the last command before the exit:
 
-Dry-run should exit **0** even when preflight reports failed units; the stability gate runs only with `--apply`.
+```bash
+bash -x ./bin/ubuntu-maintain
+```
 
-## Flatpak end-of-life runtime messages
+## Flatpak "end-of-life" messages
 
-**Symptom:** `Info: org.freedesktop.Platform … is end-of-life` during flatpak update.
-
-**Cause:** Installed apps use an old runtime. Informational from flatpak, not an ubuntu-maintain failure.
-
-**Fix:** Update or remove affected flatpak apps/runtimes (`flatpak list`, `flatpak update` per app) when convenient.
-
-## Making ubuntu-maintain available in every terminal
-
-See [README.md](../README.md#install) — add `bin/` to `PATH` or install a symlink under `~/.local/bin` or `/usr/local/bin`.
+`Info: org.freedesktop.Platform … is end-of-life` comes from flatpak itself, not ubuntu-maintain. Installed apps still use an old runtime. Update or remove those apps when convenient (`flatpak list`).
 
 ## Related docs
 
-- [REQUIREMENTS.md](REQUIREMENTS.md) — Bats, shellcheck, runtime
-- [solutions/best-practices/apt-lock-timeout-ubuntu-18-04-24-04.md](solutions/best-practices/apt-lock-timeout-ubuntu-18-04-24-04.md) — apt lock behavior across LTS releases
-
+- [REQUIREMENTS.md](REQUIREMENTS.md): runtime and development requirements
+- [solutions/best-practices/apt-lock-timeout-ubuntu-18-04-24-04.md](solutions/best-practices/apt-lock-timeout-ubuntu-18-04-24-04.md): how apt lock waiting works across Ubuntu releases

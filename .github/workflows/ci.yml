@@ -47,5 +47,7 @@ jobs:
           apt-get update -qq
           apt-get install -y --no-install-recommends apt-utils ca-certificates
           chmod +x bin/ubuntu-maintain update-script.sh
-          ./bin/ubuntu-maintain --manifest-only
+          ./bin/ubuntu-maintain --manifest-only | tee manifest.out
           ./bin/ubuntu-maintain --manifest-only --with-topgrade
+          # apt >= 1.9.11 on all matrix releases: native DPkg::Lock::Timeout must be detected
+          grep -q 'lock_wait: dpkg_timeout' manifest.out

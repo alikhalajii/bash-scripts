@@ -1,3 +1,4 @@
 # Project-wide shellcheck defaults
 shell=bash
 external-sources=true
+source-path=SCRIPTDIR

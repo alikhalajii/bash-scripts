@@ -52,15 +52,28 @@ In `ubuntu-maintain`, `um_apt_lock_opts` emits these options only when `apt_lock
 
 ### 2. Probe with `apt-config dump`, not version strings alone
 
-Detect support by parsing config, then set `lock_wait_mode`:
+`apt-config dump` prints `Key "value";` lines. apt ≥ 1.9.11 ships the knob as a **binary-scoped default**, not as a plain key (key case varies by release):
+
+| Ubuntu | apt | `apt-config dump \| grep Lock::Timeout` |
+|--------|-----|-------------------------------------------|
+| 18.04 | 1.6.17 | *(absent)* |
+| 20.04 | 2.0.10 | `Binary::apt::DPkg::Lock::Timeout "120";` |
+| 22.04 | 2.4.14 | `Binary::apt::DPkg::Lock::Timeout "120";` |
+| 24.04 | 2.8.3 | `Binary::apt::DPkg::Lock::Timeout "120";` (`binary::` on some hosts) |
+
+(Verified in `ubuntu:<version>` containers, 2026-09-29.) The `binary::apt` scope applies to the `apt` front-end only — `apt-get` defaults to no wait, which is why the option must be passed per call. Its presence is still the support signal. Parse case-insensitively; an operator-set unscoped `DPkg::Lock::Timeout` wins over the scoped default:
 
 ```bash
-raw="$(apt-config dump 2>/dev/null | awk -F': ' '/^DPkg::Lock::Timeout / {gsub(/ /,"",$2); print $2; exit}')"
+raw="$(apt-config dump 2>/dev/null | awk '
+  { k = tolower($1); v = $2; gsub(/[";]/, "", v) }
+  k == "dpkg::lock::timeout"              { print v; found = 1; exit }
+  k ~ /::dpkg::lock::timeout$/ && s == "" { s = v }
+  END { if (!found && s != "") print s }')"
 ```
 
-Fallback: `apt-config shell DPkg::Lock::Timeout`. If no integer value, set `apt_lock_timeout_supported=0` and `lock_wait_mode=fuser_poll`.
+If no integer value, set `apt_lock_timeout_supported=0` and `lock_wait_mode=fuser_poll`.
 
-On **24.04**, a failed probe (wrong parser) incorrectly forced `fuser_poll` even though `DPkg::Lock::Timeout` exists — fixing the dump parser corrected the manifest.
+**Pitfall (fixed 2026-09-29):** an earlier parser (`awk -F': ' '/^DPkg::Lock::Timeout /'`) never matched the real `Key "value";` format or the scoped key, so **every** release silently fell back to `fuser_poll`. Separately, `um_apt_lock_opts` echoed `-o DPkg::…` as one word; apt stored it as the bogus key `%20DPkg::Lock::Timeout` and ignored it. Emit `-o` and `DPkg::Lock::Timeout=N` as **two** argv words. Both are covered by bats tests; CI asserts `lock_wait: dpkg_timeout` on 20.04–24.04.
 
 ### 3. Wait on four lock paths (including `lock-frontend`)
 
@@ -98,7 +111,7 @@ Include in preflight manifest:
 ## When to Apply
 
 - Adding or changing apt phases in `lib/ubuntu-maintain/apt_module.sh` or similar tooling.
-- CI matrix tests only check manifest exit code — add version-specific assertions on `lock_wait` when probing in containers.
+- CI manifest smoke asserts `lock_wait: dpkg_timeout` on the 20.04–24.04 containers; keep that assertion when changing the probe.
 - Debugging “script stuck waiting for APT” — check lock holder with `sudo lsof` on all four paths.
 
 ## Examples

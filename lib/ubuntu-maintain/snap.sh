@@ -27,7 +27,7 @@ um_snap_phase() {
 
   if [[ "${UM_MODE}" == "monthly" ]]; then
     um_log "Removing disabled snap revisions (monthly)..."
-    LANG=C snap list --all 2>/dev/null | awk '/disabled/{print $1, $3}' | while read -r name rev; do
+    LANG=C snap list --all 2>/dev/null | awk 'NR>1 && $NF ~ /(^|,)disabled(,|$)/ {print $1, $3}' | while read -r name rev; do
       [[ -n "$name" && -n "$rev" ]] || continue
       um_sudo snap remove "$name" --revision="$rev" 2>/dev/null || true
     done || true
