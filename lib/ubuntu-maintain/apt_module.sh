@@ -84,17 +84,9 @@ um_apt_upgrade_args() {
   local -a args
   case "${UM_CAP[apt_tier_selected]:-standard}" in
     aggressive) args=(dist-upgrade) ;;
-    *)
-      local major
-      major="$(um_parse_version_id)"
-      if [[ "$major" -ge 22 ]]; then
-        args=(upgrade)
-      elif [[ "$major" -ge 18 ]]; then
-        args=(upgrade --with-new-pkgs)
-      else
-        args=(upgrade)
-      fi
-      ;;
+    # --with-new-pkgs (apt >= 1.1, every supported release) installs new dependencies such
+    # as a new kernel ABI, but like plain upgrade it never removes a package.
+    *) args=(upgrade --with-new-pkgs) ;;
   esac
   printf '%s\n' "${args[@]}"
 }
@@ -130,7 +122,8 @@ um_apt_phase() {
   um_log "Running apt-get update..."
   um_apt_update || return "${UM_EXIT_APT}"
 
-  # Re-simulate against fresh lists; the removal guard below must not use a stale count.
+  # Re-simulate against fresh lists. The standard tier never removes packages, so the
+  # guard below is a backstop in case that ever changes; it must not use a stale count.
   um_manifest_apt_simulate_summary || return "${UM_EXIT_APT}"
   local removals="${UM_CAP[apt_simulated_removals]:-0}"
   if [[ "$removals" -gt 0 && "${UM_AGGRESSIVE}" -eq 0 ]]; then

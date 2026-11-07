@@ -67,15 +67,7 @@ um_probe_apt() {
     UM_CAP[apt_held_count]=0
   fi
 
-  local major
-  major="$(um_parse_version_id)"
-  if [[ "$major" -ge 22 ]]; then
-    UM_CAP[apt_upgrade_standard_cmd]="apt-get upgrade -y"
-  elif [[ "$major" -ge 18 ]]; then
-    UM_CAP[apt_upgrade_standard_cmd]="apt-get upgrade --with-new-pkgs -y"
-  else
-    UM_CAP[apt_upgrade_standard_cmd]="apt-get upgrade -y"
-  fi
+  UM_CAP[apt_upgrade_standard_cmd]="apt-get upgrade --with-new-pkgs -y"
   UM_CAP[apt_upgrade_aggressive_cmd]="apt-get dist-upgrade -y"
 
   if [[ "${UM_AGGRESSIVE}" -eq 1 ]]; then

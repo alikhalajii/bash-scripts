@@ -43,7 +43,7 @@ sudo mv /etc/apt/sources.list.d/<repo>.sources /etc/apt/sources.list.d/<repo>.so
 
 Use the `.disabled` suffix. Other suffixes such as `.off` make apt warn about an invalid filename extension.
 
-**Package removals:** if the log says `simulate shows N package removal(s)`, the upgrade would remove packages. Review the list with `apt-get -s dist-upgrade`, then re-run with `--aggressive` if that is acceptable.
+**Packages kept back:** routine runs never remove packages, so an upgrade that needs a removal is held back. Review what it would do with `apt-get -s dist-upgrade`, then re-run with `--aggressive` if that is acceptable.
 
 ## Stability gate exit 2
 

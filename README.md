@@ -35,7 +35,7 @@ ln -s /path/to/ubuntu-maintain/bin/ubuntu-maintain ~/.local/bin/ubuntu-maintain
 Phases run in this order; each one is skipped if its tool is missing or has nothing installed.
 
 1. **Manifest:** OS, package managers, apt lock state, held packages, pending reboot, failed systemd units.
-2. **apt:** `apt-get update`, re-simulates the upgrade against fresh package lists, then upgrades.
+2. **apt:** `apt-get update`, re-simulates the upgrade against fresh package lists, then `apt-get upgrade --with-new-pkgs`.
 3. **snap:** `snap refresh`.
 4. **flatpak:** `flatpak update` (the system-wide installation).
 5. **topgrade** (only with `--with-topgrade`): pip, cargo, npm and other user-level tools.
@@ -88,8 +88,7 @@ Exit 2 is deliberate, so scheduled runs do not report an unhealthy system as gre
 ## Safety model
 
 - **Dry run by default.** Nothing changes without `--apply`.
-- **No dist-upgrade by default.** Routine runs use `apt-get upgrade` (`upgrade --with-new-pkgs` on 18.04/20.04).
-- **Removal guard.** If the post-update simulation shows package removals and `--aggressive` is not set, the apply stops before upgrading.
+- **Never removes packages by default.** Routine runs use `apt-get upgrade --with-new-pkgs`: it installs new dependencies such as a new kernel, but never removes a package. An upgrade that needs a removal stays "kept back" until you run with `--aggressive` (`dist-upgrade`).
 - **No config prompts.** Upgrades keep locally modified config files (`--force-confdef --force-confold`, the same policy as unattended-upgrades) instead of stopping at a dpkg prompt.
 - **Waits for apt locks, never deletes them.** Works alongside `unattended-upgrades` and the `apt-daily` timers.
 - **Refuses tampered code.** As root, the tool will not run if any of its own files or folders can be written by other users. A dry run warns about it.

@@ -535,6 +535,17 @@ SH
   [[ "$output" != *"linux-image-old"* ]]
 }
 
+@test "standard tier uses upgrade --with-new-pkgs on every release" {
+  source "${UM_LIB}/apt_module.sh"
+  local v
+  for v in 18.04 20.04 22.04 24.04 26.04 12; do
+    UM_CAP[os_version_id]="$v"
+    UM_CAP[apt_tier_selected]=standard
+    run um_apt_upgrade_args
+    [ "$output" = "$(printf 'upgrade\n--with-new-pkgs')" ]
+  done
+}
+
 @test "entry point warns when its code is writable by other users" {
   local copy="${TEST_TMP}/repo"
   mkdir -p "$copy"
