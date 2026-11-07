@@ -128,7 +128,8 @@ Exit codes:
   11  snap phase failed
   12  flatpak phase failed
   13  topgrade phase failed
-  64  usage error (unknown flag, missing value, sudo unavailable, or auth failed)
+  64  usage error (unknown flag, missing value, sudo unavailable, auth failed,
+      or the tool's files are writable by other users)
 EOF
 }
 

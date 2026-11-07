@@ -6,6 +6,27 @@ set -Eeuo pipefail
 
 # Resolve symlinks so `ln -s .../bin/ubuntu-maintain ~/.local/bin/` still finds lib/.
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+# Root (--apply) executes every file below. If another user can modify any of them, they
+# can run code as root. Group write is accepted only for the owner's own private group
+# (the Ubuntu default umask 002). Checked before sourcing, so a tampered lib never loads.
+um_code_tamperable() {
+  local root="$1" p uid gid mode
+  for p in "$root" "$root/bin" "$root/bin/ubuntu-maintain" \
+           "$root/lib" "$root/lib/ubuntu-maintain" "$root/lib/ubuntu-maintain/"*.sh; do
+    read -r uid gid mode < <(stat -L -c '%u %g %a' -- "$p") || return 0
+    (( 8#$mode & 8#002 )) && { echo "$p"; return 0; }
+    (( 8#$mode & 8#020 )) && [[ "$gid" != "$(id -g -- "$uid" 2>/dev/null)" ]] && { echo "$p"; return 0; }
+  done
+  return 1
+}
+if UM_BAD_PATH="$(um_code_tamperable "$(cd "${SCRIPT_DIR}/.." && pwd)")"; then
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    echo "error: ${UM_BAD_PATH} is writable by other users; refusing to run as root. Fix with: chmod -R go-w <repo>" >&2
+    exit 64
+  fi
+  echo "warning: ${UM_BAD_PATH} is writable by other users; --apply will refuse to run. Fix with: chmod -R go-w <repo>" >&2
+fi
+
 # shellcheck source=../lib/ubuntu-maintain/common.sh
 source "${SCRIPT_DIR}/../lib/ubuntu-maintain/common.sh"
 

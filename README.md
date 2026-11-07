@@ -81,7 +81,7 @@ Setting `UPDATE_APPLY=1` in the environment is the same as `--apply`.
 | 11 | snap phase failed |
 | 12 | flatpak phase failed |
 | 13 | topgrade phase failed |
-| 64 | Usage error: unknown option, missing value, sudo missing, or sudo authentication failed |
+| 64 | Usage error: unknown option, missing value, sudo missing, sudo authentication failed, or the tool's files are writable by other users |
 
 Exit 2 is deliberate, so scheduled runs do not report an unhealthy system as green. Units that are expected to fail in the current environment (e.g. `tpm-udev` on machines without a TPM, including WSL) are listed separately and do not cause exit 2. See [Troubleshooting](docs/TROUBLESHOOTING.md#stability-gate-exit-2).
 
@@ -92,6 +92,7 @@ Exit 2 is deliberate, so scheduled runs do not report an unhealthy system as gre
 - **Removal guard.** If the post-update simulation shows package removals and `--aggressive` is not set, the apply stops before upgrading.
 - **No config prompts.** Upgrades keep locally modified config files (`--force-confdef --force-confold`, the same policy as unattended-upgrades) instead of stopping at a dpkg prompt.
 - **Waits for apt locks, never deletes them.** Works alongside `unattended-upgrades` and the `apt-daily` timers.
+- **Refuses tampered code.** As root, the tool will not run if any of its own files or folders can be written by other users. A dry run warns about it.
 - **Private logs.** Logs are readable only by the user who ran the tool, and a default log path planted by another user is never written to.
 
 ## Topgrade (optional)

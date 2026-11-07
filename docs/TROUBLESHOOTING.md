@@ -71,6 +71,20 @@ sudo rm -f /tmp/ubuntu-maintain.0.log
 
 With `--log-file PATH`, the path must be writable by the user the run ends up as, which is root after `--apply`. A symlinked `--log-file` path is refused (exit 64).
 
+## Code writable by other users (exit 64)
+
+```text
+error: .../lib/ubuntu-maintain/dag.sh is writable by other users; refusing to run as root
+```
+
+`--apply` runs the tool's own files as root, so anyone who can edit them could run code as root. Remove group and world write access from the checkout (group write is fine only for your own private group, the Ubuntu default):
+
+```bash
+chmod -R go-w ~/.local/share/ubuntu-maintain    # or wherever you cloned it
+```
+
+A dry run prints the same problem as a warning.
+
 ## topgrade phase failed (exit 13)
 
 - **"requires a non-root invoking user":** topgrade runs as the user who invoked sudo. Run `ubuntu-maintain --apply --with-topgrade` from your normal account, not from a root shell or root's crontab.
