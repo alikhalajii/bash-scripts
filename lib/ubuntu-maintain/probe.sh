@@ -132,7 +132,9 @@ um_probe_flatpak() {
   fi
   UM_CAP[flatpak_available]=1
   UM_CAP[flatpak_version]="$(flatpak --version 2>/dev/null | head -1 || true)"
-  if flatpak remotes 2>/dev/null | grep -q .; then
+  # System installation only: --apply runs as root and updates the system installation,
+  # so a dry run as the user must not plan an update for per-user remotes.
+  if flatpak remotes --system 2>/dev/null | grep -q .; then
     UM_CAP[flatpak_has_remotes]=1
   fi
 }

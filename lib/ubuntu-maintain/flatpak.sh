@@ -17,7 +17,7 @@ um_flatpak_phase() {
 
   um_log ""
   um_log "=== Flatpak ==="
-  flatpak remote-ls --updates 2>/dev/null || true
+  flatpak remote-ls --system --updates 2>/dev/null || true
 
   if [[ "${UM_APPLY}" -eq 0 ]]; then
     um_log "[dry-run] would run: flatpak update"
@@ -29,13 +29,13 @@ um_flatpak_phase() {
   IFS=' ' read -ra flags <<< "$(um_flatpak_noninteractive_flags)"
 
   um_log "Updating flatpak apps..."
-  if ! flatpak update "${flags[@]}"; then
+  if ! flatpak update --system "${flags[@]}"; then
     return "${UM_EXIT_FLATPAK}"
   fi
 
   if [[ "${UM_MODE}" == "monthly" ]]; then
     um_log "Removing unused flatpak runtimes (monthly)..."
-    flatpak uninstall --unused "${flags[@]}" 2>/dev/null || true
+    flatpak uninstall --system --unused "${flags[@]}" 2>/dev/null || true
   fi
 
   return 0

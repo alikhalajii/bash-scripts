@@ -572,6 +572,19 @@ SH
   [[ "$output" == *"topgrade was not found"* ]]
 }
 
+@test "flatpak probe only considers system remotes" {
+  um_probe_command() { return 0; }
+  flatpak() {
+    case "$*" in
+      "remotes --system") return 0 ;;   # no system remotes
+      remotes) echo flathub ;;          # a per-user remote
+      *) echo "Flatpak 1.14" ;;
+    esac
+  }
+  um_probe_flatpak
+  [ "${UM_CAP[flatpak_has_remotes]}" -eq 0 ]
+}
+
 @test "entry point warns when its code is writable by other users" {
   local copy="${TEST_TMP}/repo"
   mkdir -p "$copy"

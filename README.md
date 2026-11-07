@@ -37,7 +37,7 @@ Phases run in this order; each one is skipped if its tool is missing or has noth
 1. **Manifest:** OS, package managers, apt lock state, held packages, pending reboot, failed systemd units.
 2. **apt:** `apt-get update`, re-simulates the upgrade against fresh package lists, then `apt-get upgrade --with-new-pkgs`.
 3. **snap:** `snap refresh`.
-4. **flatpak:** `flatpak update` (the system-wide installation).
+4. **flatpak:** `flatpak update` for the system-wide installation (per-user installs are left alone).
 5. **topgrade** (only with `--with-topgrade`): pip, cargo, npm and other user-level tools.
 6. **Stability gate** (only with `--apply`): pending reboot, failed systemd units, interrupted dpkg runs, and a `needrestart` report when installed.
 7. **Update summary** (only with `--apply`).
