@@ -24,7 +24,9 @@ The tool also exits **64** if `sudo` is not installed or the password is wrong.
 
 ## APT phase failed (exit 10)
 
-Almost always caused by a **broken third-party apt source**, not by ubuntu-maintain. The `apt-get update` output in the log names the failing source.
+Almost always caused by a **broken third-party apt source**, not by ubuntu-maintain. The `E:` lines from `apt-get update` in the log name the failing source.
+
+Only apt *errors* (`E:`) stop the run: a hash sum mismatch, a bad signature, or a malformed source line. A source that is merely unreachable gives a warning (`W: Failed to fetch ...`); apt then uses its old lists for that source and the run continues with exit 0. Check the log for `W:` lines if a repo's updates seem to be missing.
 
 If apt's package lists are locked by another process, such as the `apt-daily` timer, the tool retries `apt-get update` for up to 120 seconds before giving up.
 
@@ -35,10 +37,12 @@ sudo rm -f /var/lib/apt/lists/*<repo>* /var/lib/apt/lists/partial/*<repo>*
 sudo apt-get clean && sudo apt-get update
 ```
 
-If it still fails, disable the source until its vendor fixes it, then re-enable it later:
+If it still fails, disable the source until its vendor fixes it, then re-enable it later. The file ends in `.sources` (deb822, the default on 24.04+) or `.list` (older releases and many third-party repos):
 
 ```bash
 sudo mv /etc/apt/sources.list.d/<repo>.sources /etc/apt/sources.list.d/<repo>.sources.disabled
+# or
+sudo mv /etc/apt/sources.list.d/<repo>.list /etc/apt/sources.list.d/<repo>.list.disabled
 ```
 
 Use the `.disabled` suffix. Other suffixes such as `.off` make apt warn about an invalid filename extension.

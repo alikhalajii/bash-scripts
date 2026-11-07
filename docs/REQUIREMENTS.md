@@ -20,7 +20,7 @@ Optional. Each is detected at runtime, and its phase is skipped when it is missi
 
 | Tool | Purpose |
 | --- | --- |
-| [bats](https://github.com/bats-core/bats-core) 1.11+ | Runs `tests/ubuntu-maintain.bats` |
+| [bats](https://github.com/bats-core/bats-core) | Runs `tests/ubuntu-maintain.bats`. CI uses the Ubuntu package. |
 | [shellcheck](https://www.shellcheck.net/) | Static analysis; CI fails on warnings |
 
 Install both from the Ubuntu archive (universe):
@@ -29,7 +29,7 @@ Install both from the Ubuntu archive (universe):
 sudo apt install bats shellcheck
 ```
 
-If the `bats` package is unavailable, install it into `~/.local`:
+If the `bats` package is unavailable or too old, install it into `~/.local`:
 
 ```bash
 curl -fsSL https://github.com/bats-core/bats-core/tarball/v1.11.1 | tar -xz -C /tmp
