@@ -59,6 +59,27 @@ um_apt_run() {
     apt-get "${opts[@]}" "$@"
 }
 
+# DPkg::Lock::Timeout covers only the dpkg locks: `apt-get update` fails at once when
+# apt-daily holds /var/lib/apt/lists/lock (verified on apt 2.0 through 3.2). Retry while
+# that is the reason, up to the same timeout. LC_ALL=C keeps the message matchable.
+um_apt_update() {
+  local out rc waited=0 max_wait="${UM_CAP[apt_lock_timeout]:-120}"
+  while :; do
+    rc=0
+    out="$(LC_ALL=C um_apt_run update 2>&1)" || rc=$?
+    printf '%s\n' "$out"
+    [[ "$rc" -eq 0 ]] && return 0
+    grep -qE 'lock /var/lib/apt/lists/lock|lock directory /var/lib/apt/lists' <<<"$out" || return "$rc"
+    if [[ "$waited" -ge "$max_wait" ]]; then
+      um_log "error: timed out after ${max_wait}s waiting for the apt lists lock"
+      return "$rc"
+    fi
+    um_log "apt package lists are locked by another process (e.g. apt-daily); retrying in 5s..."
+    sleep 5
+    waited=$((waited + 5))
+  done
+}
+
 um_apt_upgrade_args() {
   local -a args
   case "${UM_CAP[apt_tier_selected]:-standard}" in
@@ -107,7 +128,7 @@ um_apt_phase() {
   um_apt_wait_locks || return $?
 
   um_log "Running apt-get update..."
-  um_apt_run update || return "${UM_EXIT_APT}"
+  um_apt_update || return "${UM_EXIT_APT}"
 
   # Re-simulate against fresh lists; the removal guard below must not use a stale count.
   um_manifest_apt_simulate_summary || return "${UM_EXIT_APT}"

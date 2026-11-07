@@ -26,6 +26,8 @@ The tool also exits **64** if `sudo` is not installed or the password is wrong.
 
 Almost always caused by a **broken third-party apt source**, not by ubuntu-maintain. The `apt-get update` output in the log names the failing source.
 
+If apt's package lists are locked by another process, such as the `apt-daily` timer, the tool retries `apt-get update` for up to 120 seconds before giving up.
+
 **Hash sum mismatch** on one source: clear its cached lists and retry. Replace `<repo>` with the source name from the error:
 
 ```bash

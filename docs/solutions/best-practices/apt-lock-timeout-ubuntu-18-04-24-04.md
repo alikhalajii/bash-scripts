@@ -86,6 +86,8 @@ Since Ubuntu 18.04 **dpkg frontend locking**, poll/wait on all four:
 
 The old script omitted `lock-frontend`, which can block `apt-get` on modern systems while `fuser` on legacy paths shows clear.
 
+**`DPkg::Lock::Timeout` does not cover the lists lock.** `apt-get update` fails immediately (exit 100, `E: Could not get lock /var/lib/apt/lists/lock`) while `apt-daily.service` refreshes the lists, even with the option set. Verified with a held fcntl lock on apt 2.0.10, 2.4.14, 2.8.3 and 3.2.0 (2026-11-07). `um_apt_update` therefore retries `apt-get update` every 5s, up to the same timeout, but only for that error (matched under `LC_ALL=C`); any other failure returns at once.
+
 ### 4. Bounded `fuser` poll on 18.04 (and as fallback)
 
 When `lock_wait_mode=fuser_poll`:

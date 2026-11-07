@@ -548,3 +548,47 @@ SH
   run "${copy}/bin/ubuntu-maintain" --log-file "${TEST_TMP}/um.log" --manifest-only
   [[ "$output" != *"writable by other users"* ]]
 }
+
+@test "apt-get update retries while the apt lists lock is held, then succeeds" {
+  source "${UM_LIB}/apt_module.sh"
+  local tmpbin="${TEST_TMP}/bin"
+  mkdir -p "$tmpbin"
+  # Fail twice with apt's lists-lock error, then succeed.
+  cat > "${tmpbin}/apt-get" <<SH
+#!/bin/sh
+n=\$(cat "${TEST_TMP}/n" 2>/dev/null || echo 0); echo \$((n+1)) > "${TEST_TMP}/n"
+[ "\$n" -lt 2 ] && { echo "E: Could not get lock /var/lib/apt/lists/lock. It is held by process 9 (apt-get)"; exit 100; }
+echo "Reading package lists... Done"
+SH
+  chmod +x "${tmpbin}/apt-get"
+  sleep() { :; }
+  PATH="${tmpbin}:${PATH}" run um_apt_update
+  [ "$status" -eq 0 ]
+  [ "$(cat "${TEST_TMP}/n")" -eq 3 ]
+  [[ "$output" == *"retrying in 5s"* ]]
+}
+
+@test "apt-get update does not retry other errors" {
+  source "${UM_LIB}/apt_module.sh"
+  local tmpbin="${TEST_TMP}/bin"
+  mkdir -p "$tmpbin"
+  printf '#!/bin/sh\necho "E: Malformed entry 1 in list file"; exit 100\n' > "${tmpbin}/apt-get"
+  chmod +x "${tmpbin}/apt-get"
+  sleep() { echo SLEPT; }
+  PATH="${tmpbin}:${PATH}" run um_apt_update
+  [ "$status" -eq 100 ]
+  [[ "$output" != *"SLEPT"* ]]
+}
+
+@test "apt-get update gives up after the lock timeout" {
+  source "${UM_LIB}/apt_module.sh"
+  local tmpbin="${TEST_TMP}/bin"
+  mkdir -p "$tmpbin"
+  printf '#!/bin/sh\necho "E: Could not get lock /var/lib/apt/lists/lock."; exit 100\n' > "${tmpbin}/apt-get"
+  chmod +x "${tmpbin}/apt-get"
+  sleep() { :; }
+  UM_CAP[apt_lock_timeout]=10
+  PATH="${tmpbin}:${PATH}" run um_apt_update
+  [ "$status" -eq 100 ]
+  [[ "$output" == *"timed out after 10s"* ]]
+}
