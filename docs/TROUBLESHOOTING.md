@@ -109,4 +109,4 @@ bash -x ./bin/ubuntu-maintain
 ## Related docs
 
 - [REQUIREMENTS.md](REQUIREMENTS.md): runtime and development requirements
-- [solutions/best-practices/apt-lock-timeout-ubuntu-18-04-24-04.md](solutions/best-practices/apt-lock-timeout-ubuntu-18-04-24-04.md): how apt lock waiting works across Ubuntu releases
+- [solutions/best-practices/apt-lock-timeout-ubuntu-18-04-24-04.md](solutions/best-practices/apt-lock-timeout-ubuntu-18-04-24-04.md): how apt lock waiting works across Ubuntu releases (18.04–26.04)

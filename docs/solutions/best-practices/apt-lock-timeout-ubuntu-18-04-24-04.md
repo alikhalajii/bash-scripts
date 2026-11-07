@@ -1,5 +1,5 @@
 ---
-title: APT lock handling across Ubuntu 18.04–24.04 (DPkg::Lock::Timeout vs fuser poll)
+title: APT lock handling across Ubuntu 18.04–26.04 (DPkg::Lock::Timeout vs fuser poll)
 date: 2026-05-30
 category: best-practices
 module: ubuntu-maintain
@@ -23,7 +23,7 @@ related_components:
   - probe.sh
 ---
 
-# APT lock handling across Ubuntu 18.04–24.04 (DPkg::Lock::Timeout vs fuser poll)
+# APT lock handling across Ubuntu 18.04–26.04 (DPkg::Lock::Timeout vs fuser poll)
 
 ## Context
 
@@ -60,8 +60,9 @@ In `ubuntu-maintain`, `um_apt_lock_opts` emits these options only when `apt_lock
 | 20.04 | 2.0.10 | `Binary::apt::DPkg::Lock::Timeout "120";` |
 | 22.04 | 2.4.14 | `Binary::apt::DPkg::Lock::Timeout "120";` |
 | 24.04 | 2.8.3 | `Binary::apt::DPkg::Lock::Timeout "120";` (`binary::` on some hosts) |
+| 26.04 | 3.2.1 | `Version::2.0::Dpkg::Lock::Timeout "120";` |
 
-(Verified in `ubuntu:<version>` containers, 2026-09-29.) The `binary::apt` scope applies to the `apt` front-end only — `apt-get` defaults to no wait, which is why the option must be passed per call. Its presence is still the support signal. Parse case-insensitively; an operator-set unscoped `DPkg::Lock::Timeout` wins over the scoped default:
+(Verified in `ubuntu:<version>` containers, 2026-09-29; 26.04 on a host, 2026-11-07.) The scoped default applies to the `apt` front-end only — `apt-get` defaults to no wait, which is why the option must be passed per call. Its presence is still the support signal. Parse case-insensitively; an operator-set unscoped `DPkg::Lock::Timeout` wins over the scoped default:
 
 ```bash
 raw="$(apt-config dump 2>/dev/null | awk '
@@ -109,7 +110,7 @@ Include in preflight manifest:
 ## Why This Matters
 
 - **18.04** still appears in the wild (EOL but best-effort support); it cannot use `DPkg::Lock::Timeout`.
-- **20.04–24.04** benefit from native apt waiting; redundant infinite `fuser` loops add latency and hide misconfiguration.
+- **20.04–26.04** benefit from native apt waiting; redundant infinite `fuser` loops add latency and hide misconfiguration.
 - Wrong timeout knob (`APT::Lock::Timeout`) or missing `lock-frontend` produces flaky “works on my machine” update scripts.
 - Coexists with `unattended-upgrades` / `apt-daily` — waiting is correct; deleting locks is not.
 
@@ -121,11 +122,10 @@ Include in preflight manifest:
 
 ## Examples
 
-**Probe result on 22.04+ (typical):**
+**Manifest on 20.04+ (typical):**
 
 ```text
 lock_wait: dpkg_timeout
-apt_lock_timeout: 120
 ```
 
 **Probe / apply path on 18.04:**
