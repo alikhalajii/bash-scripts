@@ -563,6 +563,15 @@ SH
   [ "${UM_CAP[apt_lock_timeout]}" -eq 120 ]
 }
 
+@test "topgrade requested but not found logs a warning" {
+  source "${UM_LIB}/topgrade.sh"
+  export UM_WITH_TOPGRADE=1
+  UM_CAP[topgrade_available]=0
+  run um_topgrade_phase
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"topgrade was not found"* ]]
+}
+
 @test "entry point warns when its code is writable by other users" {
   local copy="${TEST_TMP}/repo"
   mkdir -p "$copy"

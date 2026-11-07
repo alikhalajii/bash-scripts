@@ -92,6 +92,8 @@ A dry run prints the same problem as a warning.
 - **"requires a non-root invoking user":** topgrade runs as the user who invoked sudo. Run `ubuntu-maintain --apply --with-topgrade` from your normal account, not from a root shell or root's crontab.
 - **Any other failure:** run `topgrade` yourself as your user to see the error.
 
+If the log says `topgrade was not found for the invoking user`, topgrade is not on your login shell's PATH (check with `bash -lc 'command -v topgrade'`). The phase is skipped and does not change the exit code.
+
 ## Dry run exits non-zero
 
 A dry run should always exit 0. If it does not, run it with tracing and note the last command before the exit:

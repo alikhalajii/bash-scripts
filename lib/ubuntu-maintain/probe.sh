@@ -214,6 +214,16 @@ um_probe_health_preflight() {
 
 um_probe_topgrade() {
   UM_CAP[topgrade_available]=0
+  # Under --apply we are root with a fixed PATH, but topgrade runs as the invoking user,
+  # often from ~/.cargo/bin. Probe it the way the phase will run it.
+  if [[ "${UM_WITH_TOPGRADE:-0}" -eq 1 && "${EUID:-$(id -u)}" -eq 0 \
+        && -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    if sudo -u "$SUDO_USER" -i sh -c 'command -v topgrade' >/dev/null 2>&1; then
+      UM_CAP[topgrade_available]=1
+      UM_CAP[topgrade_version]="$(sudo -u "$SUDO_USER" -i topgrade --version 2>/dev/null | head -1 || true)"
+    fi
+    return 0
+  fi
   if um_probe_command topgrade; then
     UM_CAP[topgrade_available]=1
     UM_CAP[topgrade_version]="$(topgrade --version 2>/dev/null | head -1 || true)"

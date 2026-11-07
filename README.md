@@ -102,7 +102,7 @@ Exit 2 is deliberate, so scheduled runs do not report an unhealthy system as gre
 ubuntu-maintain --apply --with-topgrade
 ```
 
-topgrade runs as **your** user, not as root, with its system, snap, and flatpak steps disabled so nothing runs twice. Because of this it needs to know who invoked sudo: run the command from your normal account, not from a root shell.
+topgrade runs as **your** user, not as root, with its system, snap, and flatpak steps disabled so nothing runs twice. It is looked up in your login shell's PATH, so `~/.cargo/bin` works. Run the command from your normal account, not from a root shell. If topgrade is not found, the run prints a warning and skips it.
 
 ## Logs
 

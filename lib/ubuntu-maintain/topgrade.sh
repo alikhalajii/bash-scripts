@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# topgrade.sh — Optional Topgrade pass for pip/cargo/npm (disables apt/snap/flatpak).
+# topgrade.sh — Optional Topgrade pass for pip/cargo/npm (topgrade's own system/snap/flatpak steps disabled).
 # Provides: um_topgrade_phase, um_topgrade_disable_args
 # Sourced by: common.sh → um_source_libs
 
@@ -11,7 +11,10 @@ um_topgrade_disable_args() {
 
 um_topgrade_phase() {
   [[ "${UM_WITH_TOPGRADE}" -eq 1 ]] || return 0
-  [[ "${UM_CAP[topgrade_available]:-0}" -eq 1 ]] || return 0
+  if [[ "${UM_CAP[topgrade_available]:-0}" -ne 1 ]]; then
+    um_log "warning: --with-topgrade given, but topgrade was not found for the invoking user; skipping"
+    return 0
+  fi
 
   um_log ""
   um_log "=== Topgrade (language / user package managers) ==="

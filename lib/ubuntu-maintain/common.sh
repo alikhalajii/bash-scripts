@@ -106,7 +106,8 @@ Options:
   --aggressive            Use apt dist-upgrade tier (may remove packages)
   --mode daily|monthly    Hygiene depth (default: daily)
   --manifest-only         Print manifest and exit
-  --with-topgrade         Run topgrade for pip/cargo/npm/etc. (disables apt/snap/flatpak)
+  --with-topgrade         Also run topgrade for pip/cargo/npm/etc. as the invoking user
+                          (its system/snap/flatpak steps are disabled; this tool does those)
   --continue-on-pm-failure  Continue if snap/flatpak/topgrade fails (apt failure always stops)
   --ignore-stability      Do not exit 2 on failed units, pending reboot, or dpkg errors
   --restart-services      Auto-restart services (needrestart mode a); risky
