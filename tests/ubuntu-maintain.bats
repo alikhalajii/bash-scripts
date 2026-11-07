@@ -546,6 +546,23 @@ SH
   done
 }
 
+@test "lock-timeout key is ignored on apt older than 1.9.11" {
+  apt-config() { printf 'DPkg::Lock::Timeout "300";\n'; }
+  UM_CAP[apt_version]="apt 1.6.12 (amd64)"
+  um_probe_apt_config_timeout
+  [ "${UM_CAP[apt_lock_timeout_supported]}" -eq 0 ]
+  UM_CAP[apt_version]="apt 2.4.13 (amd64)"
+  um_probe_apt_config_timeout
+  [ "${UM_CAP[apt_lock_timeout_supported]}" -eq 1 ]
+}
+
+@test "lock-timeout probe reads apt 3.x Version::2.0 scoped key" {
+  apt-config() { printf 'Version::2.0::Dpkg::Lock::Timeout "120";\n'; }
+  um_probe_apt_config_timeout
+  [ "${UM_CAP[apt_lock_timeout_supported]}" -eq 1 ]
+  [ "${UM_CAP[apt_lock_timeout]}" -eq 120 ]
+}
+
 @test "entry point warns when its code is writable by other users" {
   local copy="${TEST_TMP}/repo"
   mkdir -p "$copy"

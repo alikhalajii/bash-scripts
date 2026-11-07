@@ -24,6 +24,9 @@ um_apt_env() {
 um_apt_wait_locks() {
   if [[ "${UM_CAP[lock_wait_mode]:-}" == "fuser_poll" ]]; then
     um_log "Waiting for APT locks (fuser poll)..."
+    if ! um_probe_command fuser && ! um_probe_command lsof; then
+      um_log "warning: neither fuser (psmisc) nor lsof is installed; cannot detect APT lock holders"
+    fi
     local path held waited=0 max_wait="${UM_CAP[apt_lock_timeout]:-120}"
     # Check before deciding on timeout, so locks freed on the last poll are not
     # reported as a timeout.

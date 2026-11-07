@@ -29,6 +29,14 @@ um_probe_apt_config_timeout() {
     k == "dpkg::lock::timeout"              { print v; found = 1; exit }
     k ~ /::dpkg::lock::timeout$/ && s == "" { s = v }
     END { if (!found && s != "") print s }')"
+  # apt-config echoes any key that is set, even one this apt ignores (e.g. a fleet-wide
+  # snippet on 18.04), so the key alone does not prove support.
+  local ver="${UM_CAP[apt_version]:-}"
+  ver="$(awk '{print $2}' <<<"$ver")"
+  if [[ -n "$ver" ]] && um_probe_command dpkg \
+     && dpkg --compare-versions "$ver" lt 1.9.11 2>/dev/null; then
+    raw=""
+  fi
   if [[ -n "$raw" && "$raw" =~ ^-?[0-9]+$ ]]; then
     UM_CAP[apt_lock_timeout_supported]=1
     UM_CAP[apt_lock_timeout]="$raw"

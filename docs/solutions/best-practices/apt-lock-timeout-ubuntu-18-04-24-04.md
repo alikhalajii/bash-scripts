@@ -73,7 +73,9 @@ raw="$(apt-config dump 2>/dev/null | awk '
 
 If no integer value, set `apt_lock_timeout_supported=0` and `lock_wait_mode=fuser_poll`.
 
-**Pitfall (fixed 2026-09-29):** an earlier parser (`awk -F': ' '/^DPkg::Lock::Timeout /'`) never matched the real `Key "value";` format or the scoped key, so **every** release silently fell back to `fuser_poll`. Separately, `um_apt_lock_opts` echoed `-o DPkg::…` as one word; apt stored it as the bogus key `%20DPkg::Lock::Timeout` and ignored it. Emit `-o` and `DPkg::Lock::Timeout=N` as **two** argv words. Both are covered by bats tests; CI asserts `lock_wait: dpkg_timeout` on 20.04–24.04.
+**The key alone is not proof.** `apt-config dump` echoes any key that is set, including one this apt ignores, such as a fleet-wide `DPkg::Lock::Timeout` snippet deployed to 18.04. The probe therefore also requires `apt >= 1.9.11` (`dpkg --compare-versions`) before trusting the key.
+
+**Pitfall (fixed 2026-09-29):** an earlier parser (`awk -F': ' '/^DPkg::Lock::Timeout /'`) never matched the real `Key "value";` format or the scoped key, so **every** release silently fell back to `fuser_poll`. Separately, `um_apt_lock_opts` echoed `-o DPkg::…` as one word; apt stored it as the bogus key `%20DPkg::Lock::Timeout` and ignored it. Emit `-o` and `DPkg::Lock::Timeout=N` as **two** argv words. Both are covered by bats tests; CI asserts `lock_wait: dpkg_timeout` on 20.04–26.04.
 
 ### 3. Wait on four lock paths (including `lock-frontend`)
 
@@ -93,6 +95,7 @@ The old script omitted `lock-frontend`, which can block `apt-get` on modern syst
 When `lock_wait_mode=fuser_poll`:
 
 - Use **`um_sudo fuser`** on each path (non-root `fuser` can miss holders).
+- If neither `fuser` (psmisc) nor `lsof` is installed (minimal images), holders cannot be detected; log a warning rather than silently treating locks as free.
 - Enforce a **max wait** (e.g. 600s from `UM_CAP[apt_lock_timeout]`, default 120 in probe fallback) — unbounded loops hang cron jobs if `apt-daily` holds locks.
 - On timeout: log clearly and exit non-zero; **never** `rm` lock files.
 
