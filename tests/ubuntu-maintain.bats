@@ -563,6 +563,18 @@ SH
   [ "${UM_CAP[apt_lock_timeout]}" -eq 120 ]
 }
 
+@test "EOL warning covers Ubuntu 18.04 and 20.04 only, and only on Ubuntu" {
+  UM_CAP[os_id]=ubuntu; UM_CAP[os_version_id]=20.04
+  um_probe_eol_warning
+  [[ "${UM_CAP[eol_warning]}" == *"20.04"* ]]
+  UM_CAP[os_version_id]=22.04
+  um_probe_eol_warning
+  [ -z "${UM_CAP[eol_warning]}" ]
+  UM_CAP[os_id]=linuxmint; UM_CAP[os_version_id]=20.3
+  um_probe_eol_warning
+  [ -z "${UM_CAP[eol_warning]}" ]
+}
+
 @test "topgrade requested but not found logs a warning" {
   source "${UM_LIB}/topgrade.sh"
   export UM_WITH_TOPGRADE=1

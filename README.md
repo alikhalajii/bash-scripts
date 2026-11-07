@@ -110,7 +110,7 @@ By default the log is `/tmp/ubuntu-maintain.<uid>.log`. After `--apply` that is 
 
 ## Supported systems
 
-Ubuntu 18.04 and later, and Debian. CI tests Ubuntu 20.04, 22.04, and 24.04. 18.04 is past standard support and is best effort; the manifest shows a warning there.
+Ubuntu 18.04 and later, and Debian. CI tests Ubuntu 20.04, 22.04, and 24.04. 18.04 and 20.04 are past standard support and are best effort; the manifest shows a warning there.
 
 Requires bash 4.4+ and `sudo` (for `--apply`). snap, flatpak, needrestart, and topgrade are optional. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 

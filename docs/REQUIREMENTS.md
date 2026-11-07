@@ -4,7 +4,7 @@
 
 | Requirement | Notes |
 | --- | --- |
-| Ubuntu 18.04+ or Debian | CI tests Ubuntu 20.04, 22.04, 24.04. 18.04 is best effort. |
+| Ubuntu 18.04+ or Debian | CI tests Ubuntu 20.04, 22.04, 24.04. 18.04 and 20.04 are past standard support: best effort. |
 | bash 4.4+ | Uses associative arrays. |
 | apt-get, GNU coreutils | Present on every Ubuntu/Debian install. |
 | sudo, or running as root | Needed for `--apply` only. |

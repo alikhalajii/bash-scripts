@@ -235,10 +235,10 @@ um_probe_topgrade() {
 um_probe_eol_warning() {
   local major
   major="$(um_parse_version_id)"
-  if [[ "$major" -eq 18 ]]; then
-    UM_CAP[eol_warning]="Ubuntu 18.04 is past standard support; best-effort only"
-  else
-    UM_CAP[eol_warning]=""
+  UM_CAP[eol_warning]=""
+  # Only Ubuntu's numbering is known here; derivatives reuse VERSION_ID differently.
+  if [[ "${UM_CAP[os_id]:-}" == "ubuntu" ]] && [[ "$major" -eq 18 || "$major" -eq 20 ]]; then
+    UM_CAP[eol_warning]="Ubuntu ${UM_CAP[os_version_id]} is past standard support; best-effort only"
   fi
 }
 
