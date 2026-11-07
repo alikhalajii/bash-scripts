@@ -9,7 +9,7 @@ declare -gA UM_CAP
 UM_SUMMARY_DIR=""
 
 um_summary_init() {
-  UM_SUMMARY_DIR="$(mktemp -d /tmp/ubuntu-maintain-summary.XXXXXX)"
+  UM_SUMMARY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ubuntu-maintain-summary.XXXXXX")"
   # shellcheck disable=SC2064
   trap "rm -rf '${UM_SUMMARY_DIR}'" EXIT
 }

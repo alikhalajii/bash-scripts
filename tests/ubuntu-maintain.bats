@@ -10,16 +10,28 @@ setup() {
   export UM_APPLY=0
   export UM_AGGRESSIVE=0
   export UM_MODE="daily"
+  # Keep the real /tmp clean: logs and temp dirs from tests go here.
+  TEST_TMP="$(mktemp -d)"
+  export TEST_TMP TMPDIR="$TEST_TMP"
+}
+
+teardown() {
+  rm -rf "$TEST_TMP"
+}
+
+# Run the CLI with a throwaway log instead of the user's real /tmp/ubuntu-maintain.<uid>.log.
+um_cli() {
+  run "${ROOT}/bin/ubuntu-maintain" --log-file "${TEST_TMP}/um.log" "$@"
 }
 
 @test "help exits zero" {
-  run "${ROOT}/bin/ubuntu-maintain" --help
+  um_cli --help
   [ "$status" -eq 0 ]
   [[ "$output" == *"ubuntu-maintain"* ]]
 }
 
 @test "dry-run prints manifest without root" {
-  run "${ROOT}/bin/ubuntu-maintain" --manifest-only
+  um_cli --manifest-only
   [ "$status" -eq 0 ]
   [[ "$output" == *"Capability manifest"* ]]
   [[ "$output" == *"stability gate (apply only)"* ]]
@@ -54,7 +66,7 @@ setup() {
 }
 
 @test "default dry-run exits 0 without stability failure" {
-  run "${ROOT}/bin/ubuntu-maintain"
+  um_cli
   [ "$status" -eq 0 ]
   [[ "$output" == *"Stability gate skipped in dry-run"* ]]
 }
@@ -81,12 +93,12 @@ setup() {
 }
 
 @test "unknown flag fails" {
-  run "${ROOT}/bin/ubuntu-maintain" --not-a-flag
+  um_cli --not-a-flag
   [ "$status" -eq 64 ]
 }
 
 @test "with-topgrade appears in manifest when requested" {
-  run "${ROOT}/bin/ubuntu-maintain" --manifest-only --with-topgrade
+  um_cli --manifest-only --with-topgrade
   [ "$status" -eq 0 ]
   [[ "$output" == *"topgrade:"* ]]
   [[ "$output" == *"requested: 1"* ]]
@@ -198,7 +210,8 @@ setup() {
     UM_CAP[snap_has_packages]=0
     UM_CAP[flatpak_has_remotes]=0
     UM_CAP[summary_stability]="OK"; }
-  um_summary_init
+  # shellcheck disable=SC2034  # read by um_summary_snapshot/print
+  UM_SUMMARY_DIR="$(mktemp -d)"
   um_summary_snapshot pre
   um_summary_snapshot post
   run um_summary_print
@@ -512,7 +525,8 @@ SH
   export PATH="${tmpbin}:${PATH}" UM_FAKE_STATE="$state"
   # shellcheck disable=SC2154
   { UM_CAP[apt_available]=1; UM_CAP[snap_has_packages]=0; UM_CAP[flatpak_has_remotes]=0; }
-  um_summary_init
+  # shellcheck disable=SC2034  # read by um_summary_snapshot/print
+  UM_SUMMARY_DIR="$(mktemp -d)"
   echo pre > "$state";  um_summary_snapshot pre
   echo post > "$state"; um_summary_snapshot post
   run um_summary_print

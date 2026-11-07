@@ -45,4 +45,4 @@ shellcheck --severity=warning -x bin/ubuntu-maintain update-script.sh \
   tests/run-tests.sh tests/ubuntu-maintain.bats lib/ubuntu-maintain/*.sh
 ```
 
-The tests do not need root and do not change the system.
+The tests do not need root and do not change the system. Their logs and temporary files go to a per-test directory that is removed afterwards.
