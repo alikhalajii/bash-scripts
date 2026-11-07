@@ -19,22 +19,26 @@ um_summary_snapshot() {
   [[ -n "$UM_SUMMARY_DIR" ]] || return 0
 
   # All snapshot files use normalized "name version" (space-separated, one per line, sorted).
+  # "version" is whatever changes on update: apt version, snap revision, flatpak commit.
   if [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]]; then
     # Installed packages only (status ii/hi). Config-only leftovers ("rc") are not
-    # installed, so purging them must not be reported as a removal.
-    dpkg-query -W -f '${db:Status-Abbrev} ${Package} ${Version}\n' 2>/dev/null \
+    # installed, so purging them must not be reported as a removal. binary:Package keeps
+    # the :arch suffix of Multi-Arch: same packages, so libc6:i386 and libc6:amd64 differ.
+    dpkg-query -W -f '${db:Status-Abbrev} ${binary:Package} ${Version}\n' 2>/dev/null \
       | awk '$1 ~ /^[ih]i/ && NF==3 {print $2, $3}' \
       | sort > "${UM_SUMMARY_DIR}/${label}-apt" || true
   fi
 
   if [[ "${UM_CAP[snap_has_packages]:-0}" -eq 1 ]]; then
     LANG=C snap list 2>/dev/null \
-      | awk 'NR>1 && NF>=2{print $1, $2}' \
+      | awk 'NR>1 && NF>=3{print $1, $3}' \
       | sort > "${UM_SUMMARY_DIR}/${label}-snap" || true
   fi
 
   if [[ "${UM_CAP[flatpak_has_remotes]:-0}" -eq 1 ]]; then
-    flatpak list --app --columns=application,version 2>/dev/null \
+    # ref (app or runtime, with arch and branch) and the active commit: runtimes are most
+    # updates, and a new commit often keeps the same version string.
+    flatpak list --system --columns=ref,active 2>/dev/null \
       | awk 'NF>=2{print $1, $2}' \
       | sort > "${UM_SUMMARY_DIR}/${label}-flatpak" || true
   fi

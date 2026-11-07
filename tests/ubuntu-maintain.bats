@@ -585,6 +585,38 @@ SH
   [ "${UM_CAP[flatpak_has_remotes]}" -eq 0 ]
 }
 
+@test "summary counts a snap refresh that keeps the version string" {
+  source "${UM_LIB}/summary.sh"
+  local rev=10
+  snap() { printf 'Name Version Rev Tracking Publisher Notes\ncore22 2024 %s latest/stable x base\n' "$rev"; }
+  { UM_CAP[apt_available]=0; UM_CAP[snap_has_packages]=1; UM_CAP[flatpak_has_remotes]=0; }
+  # shellcheck disable=SC2034  # read by um_summary_snapshot/print
+  UM_SUMMARY_DIR="$(mktemp -d)"
+  um_summary_snapshot pre
+  rev=11
+  um_summary_snapshot post
+  run um_summary_print
+  [[ "$output" == *"Refreshed: 1 (core22)"* ]]
+}
+
+@test "apt summary keeps multiarch packages apart" {
+  source "${UM_LIB}/summary.sh"
+  local state=pre
+  dpkg-query() {
+    printf 'ii  libc6:amd64 2.39\n'
+    [ "$state" = pre ] && printf 'ii  libc6:i386 2.39\n'
+    return 0
+  }
+  { UM_CAP[apt_available]=1; UM_CAP[snap_has_packages]=0; UM_CAP[flatpak_has_remotes]=0; }
+  # shellcheck disable=SC2034  # read by um_summary_snapshot/print
+  UM_SUMMARY_DIR="$(mktemp -d)"
+  um_summary_snapshot pre
+  state=post
+  um_summary_snapshot post
+  run um_summary_print
+  [[ "$output" == *"Removed:   1  (libc6:i386)"* ]]
+}
+
 @test "entry point warns when its code is writable by other users" {
   local copy="${TEST_TMP}/repo"
   mkdir -p "$copy"
