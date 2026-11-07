@@ -417,6 +417,39 @@ setup() {
   [[ "$output" != *"LOG=/tmp/ubuntu-maintain.${fake_uid}.log"* ]]
 }
 
+@test "default log path with extra hardlinks falls back to a private temp file" {
+  local fake_uid=987656 log
+  log="/tmp/ubuntu-maintain.${fake_uid}.log"
+  rm -f "$log" "${log}.link"; : > "$log"; ln "$log" "${log}.link"
+  run bash -c "
+    source '${UM_LIB}/common.sh'
+    id() { echo ${fake_uid}; }
+    um_setup_logging
+    echo LOG=\$UM_LOG_FILE
+  "
+  rm -f "$log" "${log}.link" /tmp/ubuntu-maintain.${fake_uid}.??????
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"LOG=${log}"* ]]
+}
+
+@test "missing default log is created exclusively with mode 600" {
+  local fake_uid=987657 log mode
+  log="/tmp/ubuntu-maintain.${fake_uid}.log"
+  rm -f "$log"
+  run bash -c "
+    umask 022
+    source '${UM_LIB}/common.sh'
+    id() { echo ${fake_uid}; }
+    um_setup_logging
+    echo LOG=\$UM_LOG_FILE
+  "
+  mode="$(stat -c %a "$log")"
+  rm -f "$log"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"LOG=${log}"* ]]
+  [ "$mode" = "600" ]
+}
+
 @test "snap probe detects installed snaps" {
   snap() { printf 'Name Version Rev Tracking Publisher Notes\ncore22 1 2 latest/stable x base\n'; }
   um_probe_command() { return 0; }

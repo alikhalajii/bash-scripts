@@ -168,7 +168,19 @@ um_parse_args() {
 um_log_path_is_safe() {
   local f="$1"
   [[ ! -L "$f" ]] || return 1
-  [[ ! -e "$f" ]] || { [[ -O "$f" && -w "$f" ]]; }
+  [[ ! -e "$f" ]] && return 0
+  # A regular file we own, can write, and that has no other hardlinks.
+  [[ -f "$f" && -O "$f" && -w "$f" && "$(stat -c %h -- "$f" 2>/dev/null)" == "1" ]]
+}
+
+# Create the default log ourselves before checking it, so there is no window in which
+# another user can plant the path between the check and tee opening it. noclobber makes
+# the create exclusive (O_EXCL); if someone else won the race, the check below rejects it.
+# Once we own the file, the sticky bit on /tmp stops others from replacing it.
+um_claim_default_log() {
+  local f="$1"
+  [[ -e "$f" || -L "$f" ]] && return 0
+  ( set -o noclobber; umask 077; : > "$f" ) 2>/dev/null || true
 }
 
 um_setup_logging() {
@@ -183,6 +195,7 @@ um_setup_logging() {
   else
     UM_LOG_FILE="$default_log"
   fi
+  [[ "$UM_LOG_FILE" == "$default_log" ]] && um_claim_default_log "$default_log"
   if [[ "$UM_LOG_FILE" == "$default_log" ]] && ! um_log_path_is_safe "$default_log"; then
     UM_LOG_FILE="$(mktemp "/tmp/ubuntu-maintain.$(id -u).XXXXXX")" || um_die "cannot create a log file in /tmp"
     echo "warning: ${default_log} is a symlink or not owned by you; logging to ${UM_LOG_FILE}" >&2
