@@ -13,13 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - run: sudo apt-get update -qq && sudo apt-get install -y shellcheck bats
-      - name: shellcheck
-        run: |
-          shellcheck --severity=warning -x bin/ubuntu-maintain update-script.sh \
-            tests/run-tests.sh tests/ubuntu-maintain.bats lib/ubuntu-maintain/*.sh
+      # Same pinned hooks as a local `pre-commit install` (see .pre-commit-config.yaml).
+      - name: shellcheck, prettier, hygiene
+        run: pipx run pre-commit run --all-files --show-diff-on-failure
       - name: bats
-        run: ./tests/run-tests.sh
+        run: pipx run pre-commit run --all-files --hook-stage pre-push
 
   # Dry run on each supported LTS: catches release differences (apt, dpkg, bash) that
   # unit tests with mocks cannot. No --apply: it would change the runner.

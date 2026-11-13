@@ -1,0 +1,52 @@
+# Quality gates. Setup once per clone: pre-commit install
+# Commit: hygiene, shellcheck, prettier. Push: bats suite. Commit message: no attribution trailer.
+# Run everything: pre-commit run --all-files (tests: add --hook-stage pre-push)
+minimum_pre_commit_version: "3.2.0" # pre-push/pre-commit stage names
+default_install_hook_types: [pre-commit, pre-push, commit-msg]
+default_stages: [pre-commit]
+# Pinned so every clone gets the same Node for the prettier/bats hooks, downloaded once by
+# pre-commit (it ignores a Node under $HOME, e.g. nvm, and "latest" breaks older nodeenv).
+default_language_version:
+  node: 24.22.2
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: check-executables-have-shebangs
+
+  # Python wheel of shellcheck: no Docker or system package needed. Reads .shellcheckrc.
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier (Markdown, YAML)
+        language: node
+        additional_dependencies: [prettier@3.9.10]
+        entry: prettier --write --ignore-unknown
+        types_or: [markdown, yaml]
+
+      - id: bats
+        name: bats test suite
+        language: node
+        additional_dependencies: [bats@1.13.0]
+        entry: tests/run-tests.sh
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: no-coauthor-trailer
+        name: no Co-Authored-By trailer in commit message
+        language: pygrep
+        entry: "(?im)^co-authored-by:"
+        stages: [commit-msg]

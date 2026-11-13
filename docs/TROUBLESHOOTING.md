@@ -59,9 +59,10 @@ Next: reboot to finish the update.
 Exit code: 2
 ```
 
-The gate reports a pending reboot (`/var/run/reboot-required`), failed systemd units, or a failed `dpkg --configure -a`. The manifest's **preflight health** section shows the first two before you apply.
+The gate reports a reboot needed for a new kernel, firmware or microcode, failed systemd units, or a failed `dpkg --configure -a`. The manifest's **preflight health** section shows the first two before you apply.
 
-- **Reboot required:** reboot. On WSL, run `wsl --shutdown` on the host, then reopen the distro. Only a new kernel, firmware or microcode counts; when the reboot flag lists only libraries (for example `libc6`), the run exits 0 and the Result block shows `Recommended: reboot or log out and in (N processes still use the old libc6)`, or nothing once no process uses the old files.
+- **Reboot required:** reboot. On WSL, run `wsl --shutdown` on the host, then reopen the distro.
+- **Restart recommended (exit 0, not a failure):** library updates such as `libc6` also set the reboot flag, but restarting the programs that use them is enough. The Result block shows `Recommended: reboot or log out and in (N processes still use the old libc6)` while any process still uses the old files, and nothing once none do.
 - **Failed units:** check them with `systemctl status <unit>` and `journalctl -u <unit>`.
 - **Known failures unrelated to updates** (for example a third-party agent whose service is broken): add `--ignore-stability`.
 

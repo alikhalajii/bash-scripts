@@ -2,7 +2,7 @@
 
 Safe, probe-driven system updates for Ubuntu and Debian.
 
-`ubuntu-maintain` detects what is installed (apt, snap, flatpak, optionally topgrade), prints a manifest of what it found and what it plans to do, and **changes nothing unless you pass `--apply`**. After an apply run it checks system health and prints a summary of every package installed, upgraded, or removed.
+`ubuntu-maintain` detects what is installed (apt, snap, flatpak, optionally topgrade), prints a manifest of what it found and what it plans to do, and **changes nothing unless you pass `--apply`**. After an apply run it checks system health and prints a summary of every package installed, upgraded, or removed. Every run ends with a short **Result**: what happened, the exit code, any warnings, and the log path.
 
 ## Install
 
@@ -40,6 +40,7 @@ Phases run in this order; each one is skipped if its tool is missing or has noth
 5. **topgrade** (only with `--with-topgrade`): pip, cargo, npm and other user-level tools.
 6. **Stability gate** (only with `--apply`): a reboot needed for a new kernel, firmware or microcode, failed systemd units, interrupted dpkg runs, and a `needrestart` report when installed. Library updates such as `libc6` only add a restart recommendation; they do not fail the run.
 7. **Update summary** (only with `--apply`).
+8. **Result** (every run): one-line verdict, a `Next:` or `Recommended:` hint when there is something to do, every warning from the run, the exit code, and the log path.
 
 ## Common tasks
 
@@ -75,7 +76,7 @@ Setting `UPDATE_APPLY=1` in the environment is the same as `--apply`.
 | Code | Meaning                                                                                                                               |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | 0    | Success (a dry run always exits 0)                                                                                                    |
-| 2    | Updates finished, but the stability gate found issues (reboot required, failed units, dpkg errors)                                    |
+| 2    | Updates finished, but the stability gate found issues (reboot for a new kernel/firmware/microcode, failed units, dpkg errors)         |
 | 10   | apt phase failed                                                                                                                      |
 | 11   | snap phase failed                                                                                                                     |
 | 12   | flatpak phase failed                                                                                                                  |
@@ -115,13 +116,16 @@ Requires bash 4.4+ and `sudo` (for `--apply`). snap, flatpak, needrestart, and t
 
 ## Development
 
+Checks run through [pre-commit](https://pre-commit.com), which downloads pinned versions of shellcheck, prettier and bats itself. Set it up once per clone:
+
 ```bash
-./tests/run-tests.sh    # bats test suite
-shellcheck --severity=warning -x bin/ubuntu-maintain update-script.sh \
-  tests/run-tests.sh tests/ubuntu-maintain.bats lib/ubuntu-maintain/*.sh
+sudo apt install pre-commit    # Ubuntu 24.04+; older releases: pipx install pre-commit
+pre-commit install             # commit: shellcheck, prettier, hygiene; push: bats; message: no Co-Authored-By
+pre-commit run --all-files     # run the commit checks on the whole repo
+pre-commit run --all-files --hook-stage pre-push   # run the test suite
 ```
 
-How to install bats and shellcheck: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md). CI (`.github/workflows/ci.yml`) runs shellcheck, the bats suite, and a dry run in Ubuntu 20.04–26.04 containers.
+CI (`.github/workflows/ci.yml`) runs the same two `pre-commit` commands, plus a dry run in Ubuntu 20.04–26.04 containers. Details: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md#development).
 
 ### Repository layout
 
@@ -131,5 +135,6 @@ lib/ubuntu-maintain/    modules (probe, manifest, apt, snap, flatpak, topgrade, 
 tests/                  bats tests
 docs/                   requirements, troubleshooting, operational notes (docs/solutions/)
 update-script.sh        legacy wrapper, same as `ubuntu-maintain --apply`
+.pre-commit-config.yaml pinned quality checks (local hooks and CI)
 AGENTS.md               notes for coding agents working on this repo
 ```
