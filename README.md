@@ -138,3 +138,7 @@ update-script.sh        legacy wrapper, same as `ubuntu-maintain --apply`
 .pre-commit-config.yaml pinned quality checks (local hooks and CI)
 AGENTS.md               notes for coding agents working on this repo
 ```
+
+## License
+
+[MIT](LICENSE)
