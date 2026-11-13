@@ -858,3 +858,11 @@ fake_outdated_proc() {
   um_probe_restart_needs
   [ "${UM_CAP[reboot_reason]}" = "dbus" ]
 }
+
+@test "result block lists a repeated warning once" {
+  source "${UM_LIB}/summary.sh"
+  UM_APPLY=0
+  UM_ISSUES=("warning: held packages may block some upgrades" "warning: held packages may block some upgrades")
+  run um_result_print 0
+  [ "$(grep -c 'held packages' <<<"$output")" -eq 1 ]
+}

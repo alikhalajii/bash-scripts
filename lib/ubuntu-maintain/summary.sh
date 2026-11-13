@@ -165,7 +165,9 @@ um_result_print() {
   if [[ -n "${UM_CAP[restart_reason]:-}" ]]; then
     printf 'Recommended: reboot or log out and in (%s).\n' "${UM_CAP[restart_reason]}"
   fi
-  for issue in "${UM_ISSUES[@]}"; do printf '  ! %s\n' "$issue"; done
+  if [[ ${#UM_ISSUES[@]} -gt 0 ]]; then
+    printf '%s\n' "${UM_ISSUES[@]}" | awk '!seen[$0]++ {print "  ! " $0}'
+  fi
   printf 'Exit code: %s\n' "$rc"
   [[ -n "${UM_LOG_FILE:-}" ]] && printf 'Log: %s\n' "$UM_LOG_FILE"
   return 0
