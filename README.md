@@ -2,7 +2,7 @@
 
 Safe, probe-driven system updates for Ubuntu and Debian.
 
-`ubuntu-maintain` detects what is installed (apt, snap, flatpak, optionally topgrade), prints a manifest of what it found and what it plans to do, and **changes nothing unless you pass `--apply`**. After an apply run it checks system health and prints a summary of every package installed, upgraded, or removed. Every run ends with a short **Result**: what happened, the exit code, any warnings, and the log path.
+`ubuntu-maintain` detects what is installed (apt, snap, flatpak, optionally topgrade), prints a manifest of what it found and what it plans to do, and **changes nothing unless you pass `--apply`**. After an apply run it checks system health and prints a summary of every package installed, upgraded, or removed. Every dry run and update run ends with a short **Result**: what happened, the exit code, the warnings it logged, and the log path.
 
 ## Install
 
@@ -40,7 +40,7 @@ Phases run in this order; each one is skipped if its tool is missing or has noth
 5. **topgrade** (only with `--with-topgrade`): pip, cargo, npm and other user-level tools.
 6. **Stability gate** (only with `--apply`): a reboot needed for a new kernel, firmware or microcode, failed systemd units, interrupted dpkg runs, and a `needrestart` report when installed. Library updates such as `libc6` only add a restart recommendation; they do not fail the run.
 7. **Update summary** (only with `--apply`).
-8. **Result** (every run): one-line verdict, a `Next:` or `Recommended:` hint when there is something to do, every warning from the run, the exit code, and the log path.
+8. **Result** (every dry run and update run; not for `--help` or usage errors): one-line verdict, a `Next:` or `Recommended:` hint when there is something to do, the warnings logged during the run, the exit code, and the log path.
 
 ## Common tasks
 

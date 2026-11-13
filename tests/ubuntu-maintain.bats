@@ -832,3 +832,21 @@ fake_outdated_proc() {
   [[ "$output" == *"Recommended: reboot or log out and in (131 processes still use the old libc6)."* ]]
   [[ "$output" == *"Exit code: 0"* ]]
 }
+
+@test "result block does not claim health for a manifest-only run" {
+  source "${UM_LIB}/summary.sh"
+  UM_APPLY=1 UM_MANIFEST_ONLY=1
+  run um_result_print 0
+  [[ "$output" == *"Manifest only: nothing was changed."* ]]
+  [[ "$output" != *"healthy"* ]]
+}
+
+@test "result block reports ignored stability issues instead of healthy" {
+  source "${UM_LIB}/summary.sh"
+  UM_APPLY=1 UM_MANIFEST_ONLY=0
+  UM_CAP[stability_issues]="reboot required (linux-image-7.0.0-44-generic)"
+  run um_result_print 0
+  [[ "$output" == *"Updates applied; ignored by --ignore-stability: reboot required (linux-image-7.0.0-44-generic)"* ]]
+  [[ "$output" == *"Next: reboot to finish the update."* ]]
+  [[ "$output" != *"healthy"* ]]
+}

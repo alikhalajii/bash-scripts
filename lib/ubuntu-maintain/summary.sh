@@ -138,23 +138,27 @@ um_result_print() {
   local -a next=()
   case "$rc" in
     0)
-      if [[ "${UM_APPLY}" -eq 1 ]]; then
-        verdict="Done: updates applied and the system looks healthy."
-      else
+      if [[ "${UM_MANIFEST_ONLY:-0}" -eq 1 ]]; then
+        verdict="Manifest only: nothing was changed."
+      elif [[ "${UM_APPLY}" -eq 0 ]]; then
         verdict="Dry run: nothing was changed. Run with --apply to apply."
+      elif [[ -n "$reasons" ]]; then
+        verdict="Updates applied; ignored by --ignore-stability: ${reasons}"
+      else
+        verdict="Done: updates applied and the system looks healthy."
       fi ;;
     "${UM_EXIT_STABILITY}")
-      verdict="Updates applied, but the system needs attention: ${reasons:-see the stability gate above}"
-      [[ "$reasons" == *"reboot required"* ]] && next+=("reboot to finish the update.")
-      [[ "$reasons" == *"failed systemd unit"* ]] && next+=("check the failed units above (systemctl status <unit>), or re-run with --ignore-stability if they are expected.")
-      [[ "$reasons" == *"dpkg --configure -a failed"* ]] && next+=("run 'sudo dpkg --configure -a' and read its errors.")
-      ;;
+      verdict="Updates applied, but the system needs attention: ${reasons:-see the stability gate above}" ;;
     "${UM_EXIT_APT}")      verdict="APT step failed; see its section above." ;;
     "${UM_EXIT_SNAP}")     verdict="Snap step failed; see its section above." ;;
     "${UM_EXIT_FLATPAK}")  verdict="Flatpak step failed; see its section above." ;;
     "${UM_EXIT_TOPGRADE}") verdict="Topgrade step failed; see its section above." ;;
     *)                     verdict="Finished with errors." ;;
   esac
+  # Hints follow the gate's reasons, also when --ignore-stability kept the exit code at 0.
+  [[ "$reasons" == *"reboot required"* ]] && next+=("reboot to finish the update.")
+  [[ "$reasons" == *"failed systemd unit"* ]] && next+=("check the failed units above (systemctl status <unit>), or re-run with --ignore-stability if they are expected.")
+  [[ "$reasons" == *"dpkg --configure -a failed"* ]] && next+=("run 'sudo dpkg --configure -a' and read its errors.")
   um_section "Result"
   printf '%s\n' "$verdict"
   for issue in "${next[@]}"; do printf 'Next: %s\n' "$issue"; done
