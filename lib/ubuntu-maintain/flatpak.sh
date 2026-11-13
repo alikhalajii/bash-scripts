@@ -15,8 +15,7 @@ um_flatpak_noninteractive_flags() {
 um_flatpak_phase() {
   [[ "${UM_CAP[flatpak_has_remotes]:-0}" -eq 1 ]] || return 0
 
-  um_log ""
-  um_log "=== Flatpak ==="
+  um_section "Flatpak"
   flatpak remote-ls --system --updates 2>/dev/null || true
 
   if [[ "${UM_APPLY}" -eq 0 ]]; then

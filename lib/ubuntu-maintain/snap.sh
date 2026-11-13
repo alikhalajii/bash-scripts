@@ -10,8 +10,7 @@ um_snap_preflight_list() {
 um_snap_phase() {
   [[ "${UM_CAP[snap_has_packages]:-0}" -eq 1 ]] || return 0
 
-  um_log ""
-  um_log "=== Snap ==="
+  um_section "Snap"
   um_snap_preflight_list
 
   if [[ "${UM_APPLY}" -eq 0 ]]; then

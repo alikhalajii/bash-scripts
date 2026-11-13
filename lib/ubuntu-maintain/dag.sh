@@ -16,6 +16,7 @@ um_run_dag() {
 
   if [[ "${UM_MANIFEST_ONLY}" -eq 1 ]]; then
     if [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]]; then
+      um_section "APT"
       um_manifest_apt_simulate_summary || um_log "note: apt simulate skipped or incomplete without root"
     fi
     return 0
@@ -26,6 +27,7 @@ um_run_dag() {
   fi
 
   if [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]]; then
+    um_section "APT"
     um_apt_env
     if ! um_manifest_apt_simulate_summary; then
       if [[ "${UM_APPLY}" -eq 0 ]]; then
@@ -103,17 +105,6 @@ um_run_dag() {
 
   if [[ "${UM_APPLY}" -eq 1 ]]; then
     um_summary_print
-
-    if [[ "$exit_code" -eq 0 ]]; then
-      um_log "ubuntu-maintain completed successfully."
-    elif [[ "$exit_code" -eq "${UM_EXIT_STABILITY}" \
-        && "$apt_rc" -eq 0 && "$snap_rc" -eq 0 && "$flatpak_rc" -eq 0 && "$topgrade_rc" -eq 0 ]]; then
-      um_log "Package manager updates completed."
-      um_log "Stability gate reported issues (exit ${exit_code}). Reboot and/or fix the failed units listed above, or re-run with --ignore-stability if they are expected."
-    else
-      um_log "ubuntu-maintain finished with errors (exit ${exit_code})."
-    fi
-    um_log "Log: ${UM_LOG_FILE}"
   fi
 
   return "$exit_code"

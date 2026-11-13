@@ -16,8 +16,7 @@ um_topgrade_phase() {
     return 0
   fi
 
-  um_log ""
-  um_log "=== Topgrade (language / user package managers) ==="
+  um_section "Topgrade (language / user package managers)"
 
   local -a disable_args
   mapfile -t disable_args < <(um_topgrade_disable_args)

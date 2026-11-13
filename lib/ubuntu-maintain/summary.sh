@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # summary.sh — Capture pre/post PM snapshots and print a structured apply summary.
-# Provides: um_summary_init, um_summary_snapshot, um_summary_print
+# Provides: um_summary_init, um_summary_snapshot, um_summary_print, um_result_print
 # Sourced by: common.sh → um_source_libs
 
 # Declared in common.sh; repeated here so shellcheck can infer the associative-array type.
@@ -87,8 +87,7 @@ _um_diff_apt() {
 um_summary_print() {
   [[ -n "$UM_SUMMARY_DIR" ]] || return 0
 
-  um_log ""
-  um_log "=== Update Summary ==="
+  um_section "Update Summary"
 
   if [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]]; then
     local apt_diff inst_n inst_names upg_n upg_names rem_n rem_names
@@ -130,5 +129,37 @@ um_summary_print() {
 
   um_log ""
   um_log "Stability: ${UM_CAP[summary_stability]:-OK}"
-  um_log "======================"
+}
+
+# Last block of every run: what happened in one sentence, the exit code, and every
+# warning/error logged along the way (collected by um_log).
+um_result_print() {
+  local rc="$1" verdict issue reasons="${UM_CAP[stability_issues]:-}"
+  local -a next=()
+  case "$rc" in
+    0)
+      if [[ "${UM_APPLY}" -eq 1 ]]; then
+        verdict="Done: updates applied and the system looks healthy."
+      else
+        verdict="Dry run: nothing was changed. Run with --apply to apply."
+      fi ;;
+    "${UM_EXIT_STABILITY}")
+      verdict="Updates applied, but the system needs attention: ${reasons:-see the stability gate above}"
+      [[ "$reasons" == *"reboot required"* ]] && next+=("reboot to finish the update.")
+      [[ "$reasons" == *"failed systemd unit"* ]] && next+=("check the failed units above (systemctl status <unit>), or re-run with --ignore-stability if they are expected.")
+      [[ "$reasons" == *"dpkg --configure -a failed"* ]] && next+=("run 'sudo dpkg --configure -a' and read its errors.")
+      ;;
+    "${UM_EXIT_APT}")      verdict="APT step failed; see its section above." ;;
+    "${UM_EXIT_SNAP}")     verdict="Snap step failed; see its section above." ;;
+    "${UM_EXIT_FLATPAK}")  verdict="Flatpak step failed; see its section above." ;;
+    "${UM_EXIT_TOPGRADE}") verdict="Topgrade step failed; see its section above." ;;
+    *)                     verdict="Finished with errors." ;;
+  esac
+  um_section "Result"
+  printf '%s\n' "$verdict"
+  for issue in "${next[@]}"; do printf 'Next: %s\n' "$issue"; done
+  for issue in "${UM_ISSUES[@]}"; do printf '  ! %s\n' "$issue"; done
+  printf 'Exit code: %s\n' "$rc"
+  [[ -n "${UM_LOG_FILE:-}" ]] && printf 'Log: %s\n' "$UM_LOG_FILE"
+  return 0
 }

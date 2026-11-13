@@ -35,4 +35,7 @@ um_parse_args "${UM_CLI_ARGS[@]}"
 um_reexec_as_root_if_apply "${UM_CLI_ARGS[@]}"
 um_setup_logging
 um_source_libs
-um_run_dag
+um_rc=0
+um_run_dag || um_rc=$?
+um_result_print "$um_rc"
+exit "$um_rc"

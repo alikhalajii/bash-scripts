@@ -62,7 +62,7 @@ um_cli() {
     UM_CAP[reboot_required_preflight]=0; }
   run um_manifest_print
   [ "$status" -eq 0 ]
-  [[ "$output" == *"stability gate will likely exit 2"* ]]
+  [[ "$output" == *"--apply will likely exit 2"* ]]
 }
 
 @test "default dry-run exits 0 without stability failure" {
@@ -143,12 +143,12 @@ um_cli() {
   [[ "$output" == *"REBOOT REQUIRED (packages: linux-image-6.8 libc6)"* ]]
 }
 
-@test "manifest warns about exit 2 when only a reboot is pending" {
-  export UM_APPLY=1 UM_IGNORE_STABILITY=0
+@test "manifest warns about exit 2 when only a reboot is pending, also in a dry run" {
+  export UM_APPLY=0 UM_IGNORE_STABILITY=0
   # shellcheck disable=SC2154
   { UM_CAP[failed_units_preflight]=0; UM_CAP[reboot_required_preflight]=1; UM_CAP[manifest_timestamp]="t"; }
   run um_manifest_print
-  [[ "$output" == *"stability gate will likely exit 2"* ]]
+  [[ "$output" == *"--apply will likely exit 2"* ]]
 }
 
 @test "snap monthly cleanup does not fail when snap list exits nonzero" {
@@ -691,3 +691,78 @@ SH
   [ "$status" -eq 100 ]
   [[ "$output" == *"timed out after 10s"* ]]
 }
+
+@test "um_log collects warnings and errors for the result block" {
+  UM_ISSUES=()
+  um_log "  warning: a"
+  um_log "error: b"
+  um_log "ok, no warning: here"
+  [ "${#UM_ISSUES[@]}" -eq 2 ]
+  [ "${UM_ISSUES[0]}" = "warning: a" ]
+  [ "${UM_ISSUES[1]}" = "error: b" ]
+}
+
+@test "dry run gives APT its own section" {
+  um_cli
+  [[ "$output" == *"=== APT ==="* ]]
+  [[ "$output" != *"========================="* ]]
+}
+
+@test "dry run ends with a Result block that says nothing changed" {
+  um_cli
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"=== Result ==="*"Dry run: nothing was changed. Run with --apply to apply."*"Exit code: 0"*"Log: "* ]]
+}
+
+@test "result block explains exit 2 with the stability reasons and lists issues" {
+  source "${UM_LIB}/summary.sh"
+  UM_APPLY=1 UM_LOG_FILE=/x.log
+  UM_CAP[stability_issues]="reboot required (libc6)"
+  UM_ISSUES=("warning: held packages may block some upgrades")
+  run um_result_print 2
+  [[ "$output" == *"Updates applied, but the system needs attention: reboot required (libc6)"* ]]
+  [[ "$output" == *"Next: reboot to finish the update."* ]]
+  [[ "$output" != *"failed units"* ]]
+  [[ "$output" == *"Exit code: 2"* ]]
+  [[ "$output" == *"  ! warning: held packages may block some upgrades"* ]]
+  [[ "$output" == *"Log: /x.log"* ]]
+}
+
+@test "result block names the failed step" {
+  source "${UM_LIB}/summary.sh"
+  UM_APPLY=1
+  run um_result_print 10
+  [[ "$output" == *"APT step failed; see its section above."*"Exit code: 10"* ]]
+  run um_result_print 12
+  [[ "$output" == *"Flatpak step failed"* ]]
+}
+
+@test "stability gate records why it failed" {
+  source "${UM_LIB}/stability.sh"
+  UM_IGNORE_STABILITY=0
+  local rf="${TEST_TMP}/reboot-required"
+  : > "$rf"; printf 'libc6\nlinux-image-x\nlibc6\n' > "${rf}.pkgs"
+  um_reboot_required_file() { echo "$rf"; }
+  um_probe_command() { return 1; }
+  um_stability_gate >/dev/null || true
+  [ "${UM_CAP[stability_issues]}" = "reboot required (libc6, linux-image-x)" ]
+}
+
+@test "result block points at failed units only when units failed" {
+  source "${UM_LIB}/summary.sh"
+  UM_APPLY=1
+  UM_CAP[stability_issues]="2 failed systemd unit(s)"
+  run um_result_print 2
+  [[ "$output" == *"Next: check the failed units above"* ]]
+  [[ "$output" != *"reboot to finish"* ]]
+}
+
+@test "under --apply the preflight exit-2 prediction is a note, not a repeated warning" {
+  export UM_APPLY=1 UM_IGNORE_STABILITY=0
+  # shellcheck disable=SC2154
+  { UM_CAP[failed_units_preflight]=0; UM_CAP[reboot_required_preflight]=1; UM_CAP[manifest_timestamp]="t"; }
+  UM_ISSUES=()
+  um_manifest_print >/dev/null
+  [ "${#UM_ISSUES[@]}" -eq 0 ]
+}
+

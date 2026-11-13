@@ -7,8 +7,7 @@
 declare -gA UM_CAP
 
 um_manifest_print() {
-  um_log ""
-  um_log "=== Capability manifest ==="
+  um_section "Capability manifest"
   um_log "timestamp: ${UM_CAP[manifest_timestamp]}"
   um_log "os: ${UM_CAP[os_pretty]:-${UM_CAP[os_id]} ${UM_CAP[os_version_id]}}"
   if [[ -n "${UM_CAP[eol_warning]:-}" ]]; then
@@ -51,16 +50,18 @@ um_manifest_print() {
   if [[ "${UM_CAP[failed_units_expected_preflight]:-0}" -gt 0 ]]; then
     um_log "  failed_units_expected: ${UM_CAP[failed_units_expected_preflight]} (environment-specific, ignored by gate)"
   fi
-  if [[ "${UM_APPLY}" -eq 1 && "${UM_IGNORE_STABILITY}" -eq 0 ]]; then
+  if [[ "${UM_IGNORE_STABILITY}" -eq 0 ]]; then
     if [[ "${UM_CAP[failed_units_preflight]:-0}" -gt 0 || "${UM_CAP[reboot_required_preflight]:-0}" -eq 1 ]]; then
-      um_log "warning: stability gate will likely exit ${UM_EXIT_STABILITY} (pending reboot or failed units) unless resolved or --ignore-stability is set"
+      # A warning in a dry run (repeated in the Result block); under --apply only a note,
+      # because the stability gate reports the outcome itself.
+      local level=warning; [[ "${UM_APPLY}" -eq 1 ]] && level=note
+      um_log "${level}: --apply will likely exit ${UM_EXIT_STABILITY} (pending reboot or failed units) unless resolved or --ignore-stability is set"
     fi
   fi
 
   um_log ""
   um_log "planned phases:"
   um_manifest_planned_phases
-  um_log "========================="
 }
 
 um_manifest_planned_phases() {
@@ -114,7 +115,6 @@ um_manifest_apt_simulate_summary() {
   held_changes="$(echo "$sim" | grep -ci 'held' || true)"
   UM_CAP[apt_simulated_held_mentions]="$held_changes"
 
-  um_log ""
   um_log "apt simulate (${UM_CAP[apt_tier_selected]}):"
   um_log "  packages_to_remove: ${removals}"
   if [[ "$removals" -gt 0 && "${UM_AGGRESSIVE}" -eq 0 ]]; then

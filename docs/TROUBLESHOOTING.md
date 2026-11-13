@@ -53,7 +53,10 @@ Use the `.disabled` suffix. Other suffixes such as `.off` make apt warn about an
 The updates finished, but the system is not healthy:
 
 ```text
-Stability gate: issues detected (exit 2)
+=== Result ===
+Updates applied, but the system needs attention: reboot required (libc6)
+Next: reboot to finish the update.
+Exit code: 2
 ```
 
 The gate reports a pending reboot (`/var/run/reboot-required`), failed systemd units, or a failed `dpkg --configure -a`. The manifest's **preflight health** section shows the first two before you apply.

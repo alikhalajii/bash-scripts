@@ -4,22 +4,26 @@
 # Sourced by: common.sh → um_source_libs
 
 um_stability_gate() {
-  um_log ""
-  um_log "=== Stability gate ==="
+  um_section "Stability gate"
   local rc=0
+  local -a reasons=()
 
   if um_probe_command dpkg; then
     if dpkg --audit 2>/dev/null | grep -q .; then
       um_log "Running dpkg --configure -a..."
-      um_sudo dpkg --configure -a || { [[ "${UM_IGNORE_STABILITY}" -eq 0 ]] && rc="${UM_EXIT_STABILITY}"; }
+      um_sudo dpkg --configure -a || {
+        reasons+=("dpkg --configure -a failed")
+        [[ "${UM_IGNORE_STABILITY}" -eq 0 ]] && rc="${UM_EXIT_STABILITY}"
+      }
     fi
   fi
 
   local reboot_file pkgs
   reboot_file="$(um_reboot_required_file)"
   if [[ -f "$reboot_file" ]]; then
-    pkgs=""; [[ -f "${reboot_file}.pkgs" ]] && pkgs="$(tr '\n' ' ' < "${reboot_file}.pkgs")"
-    um_log "REBOOT REQUIRED${pkgs:+ (packages: ${pkgs% })}"
+    pkgs=""; [[ -f "${reboot_file}.pkgs" ]] && pkgs="$(awk 'NF && !seen[$0]++' "${reboot_file}.pkgs" | paste -sd ' ')"
+    um_log "REBOOT REQUIRED${pkgs:+ (packages: ${pkgs})}"
+    reasons+=("reboot required${pkgs:+ (${pkgs// /, })}")
     if um_is_wsl; then um_log "  on WSL: run 'wsl --shutdown' on the host, then reopen the distro"; fi
     if [[ "${UM_IGNORE_STABILITY}" -eq 0 ]]; then rc="${UM_EXIT_STABILITY}"; fi
   fi
@@ -30,6 +34,7 @@ um_stability_gate() {
     if [[ ${#UM_FAILED_UNEXPECTED[@]} -gt 0 ]]; then
       um_log "Failed systemd units:"
       printf '%s\n' "${UM_FAILED_UNEXPECTED[@]}"
+      reasons+=("${#UM_FAILED_UNEXPECTED[@]} failed systemd unit(s)")
       if [[ "${UM_IGNORE_STABILITY}" -eq 0 ]]; then rc="${UM_EXIT_STABILITY}"; fi
     else
       um_log "No ${UM_FAILED_EXPECTED[*]:+unexpected }failed systemd units."
@@ -50,6 +55,11 @@ um_stability_gate() {
     fi
   fi
 
+  # Read by um_result_print to explain exit 2 in one line.
+  local joined="" reason
+  for reason in "${reasons[@]}"; do joined+="${joined:+; }${reason}"; done
+  # shellcheck disable=SC2154  # UM_CAP is declared in common.sh
+  UM_CAP[stability_issues]="$joined"
   if [[ "$rc" -eq 0 ]]; then
     um_log "Stability gate: OK"
   else

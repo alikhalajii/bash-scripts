@@ -37,9 +37,19 @@ um_die() {
   exit "${UM_EXIT_USAGE}"
 }
 
+UM_ISSUES=()
+
 um_log() {
   # printf, not echo: a message starting with -n/-e must print literally.
   printf '%s\n' "$*"
+  # Repeat warnings and errors in the final Result block (um_result_print). Only direct
+  # calls are recorded; a call inside $(...) runs in a subshell.
+  local msg="${*#"${*%%[![:space:]]*}"}"
+  case "$msg" in warning:* | error:*) UM_ISSUES+=("$msg") ;; esac
+}
+
+um_section() {
+  printf '\n=== %s ===\n' "$1"
 }
 
 # Safety check: um_reexec_as_root_if_apply (bin/ubuntu-maintain) handles re-exec before um_run_dag
