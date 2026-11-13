@@ -59,7 +59,7 @@ Next: reboot to finish the update.
 Exit code: 2
 ```
 
-The gate reports a reboot needed for a new kernel, firmware or microcode, failed systemd units, or a failed `dpkg --configure -a`. The manifest's **preflight health** section shows the first two before you apply.
+The gate reports a reboot needed for a new kernel, firmware, microcode or dbus (or a reboot flag that names no package), failed systemd units, or a failed `dpkg --configure -a`. The manifest's **preflight health** section shows the first two before you apply.
 
 - **Reboot required:** reboot. On WSL, run `wsl --shutdown` on the host, then reopen the distro.
 - **Restart recommended (exit 0, not a failure):** library updates such as `libc6` also set the reboot flag, but restarting the programs that use them is enough. The Result block shows `Recommended: reboot or log out and in (N processes still use the old libc6)` while any process still uses the old files, and nothing once none do.

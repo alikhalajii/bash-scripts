@@ -212,7 +212,7 @@ um_outdated_process_count() {
 }
 
 # Sets UM_CAP[reboot_reason] when only a reboot helps: a newer kernel than the running
-# one, or kernel/firmware/microcode packages in the reboot-required list (or a flag
+# one, or kernel/firmware/microcode/dbus packages in the reboot-required list (or a flag
 # without a package list). Library updates such as libc6 also set that flag, but
 # restarting the processes that use them is enough: those set UM_CAP[restart_reason],
 # and only while some process still uses the old files.
@@ -233,7 +233,8 @@ um_probe_restart_needs() {
   fi
   [[ -f "$flag" ]] || return 0
   [[ -f "${flag}.pkgs" ]] && pkgs="$(awk 'NF && !seen[$0]++' "${flag}.pkgs" | paste -sd ' ')"
-  hw="$(tr ' ' '\n' <<<"$pkgs" | grep -E '^linux-|microcode' | paste -sd ' ')"
+  # dbus: the system message bus cannot be restarted on a running system.
+  hw="$(tr ' ' '\n' <<<"$pkgs" | grep -E '^linux-|microcode|^dbus(-daemon|-broker)?$' | paste -sd ' ')"
   if [[ -z "$pkgs" ]]; then
     UM_CAP[reboot_reason]="requested by a package update"
   elif [[ -n "$hw" ]]; then

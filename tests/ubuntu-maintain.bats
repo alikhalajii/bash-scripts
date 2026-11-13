@@ -850,3 +850,11 @@ fake_outdated_proc() {
   [[ "$output" == *"Next: reboot to finish the update."* ]]
   [[ "$output" != *"healthy"* ]]
 }
+
+@test "a dbus update requires a reboot (the system bus cannot be restarted live)" {
+  local rf="${TEST_TMP}/reboot-required"
+  : > "$rf"; printf 'dbus\nlibc6\n' > "${rf}.pkgs"
+  um_reboot_required_file() { echo "$rf"; }
+  um_probe_restart_needs
+  [ "${UM_CAP[reboot_reason]}" = "dbus" ]
+}
