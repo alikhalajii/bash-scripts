@@ -46,6 +46,8 @@ um_manifest_print() {
   um_log ""
   um_log "preflight health:"
   um_log "  reboot_required: ${UM_CAP[reboot_required_preflight]:-0}"
+  if [[ -n "${UM_CAP[reboot_reason]:-}" ]]; then um_log "    reason: ${UM_CAP[reboot_reason]}"; fi
+  if [[ -n "${UM_CAP[restart_reason]:-}" ]]; then um_log "  restart_recommended: ${UM_CAP[restart_reason]}"; fi
   um_log "  failed_units: ${UM_CAP[failed_units_preflight]:-0}"
   if [[ "${UM_CAP[failed_units_expected_preflight]:-0}" -gt 0 ]]; then
     um_log "  failed_units_expected: ${UM_CAP[failed_units_expected_preflight]} (environment-specific, ignored by gate)"

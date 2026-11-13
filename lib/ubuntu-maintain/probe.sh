@@ -201,9 +201,57 @@ um_classify_failed_units() {
   done < <(systemctl --failed --no-legend --no-pager --plain 2>/dev/null || true)
 }
 
+# Processes still running code from a file that an upgrade replaced: the old file is
+# deleted but still mapped. Root sees every process; a normal user only their own.
+um_outdated_process_count() {
+  local maps n=0
+  for maps in "${UM_PROC_DIR:-/proc}"/[0-9]*/maps; do
+    grep -qE ' /(usr/)?(lib|lib64|libexec|bin|sbin)/.* \(deleted\)$' "$maps" 2>/dev/null && n=$((n + 1))
+  done
+  echo "$n"
+}
+
+# Sets UM_CAP[reboot_reason] when only a reboot helps: a newer kernel than the running
+# one, or kernel/firmware/microcode packages in the reboot-required list (or a flag
+# without a package list). Library updates such as libc6 also set that flag, but
+# restarting the processes that use them is enough: those set UM_CAP[restart_reason],
+# and only while some process still uses the old files.
+um_probe_restart_needs() {
+  UM_CAP[reboot_reason]=""
+  UM_CAP[restart_reason]=""
+  local flag running flavor newest pkgs="" hw n
+  flag="$(um_reboot_required_file)"
+  running="$(uname -r)"
+  flavor="${running##*-}"
+  newest="$( { echo "$running"
+               for f in "${UM_BOOT_DIR:-/boot}"/vmlinuz-*-"$flavor"; do
+                 [[ -e "$f" ]] && echo "${f##*/vmlinuz-}"
+               done; } | sort -V | tail -n1)"
+  if [[ "$newest" != "$running" ]]; then
+    UM_CAP[reboot_reason]="kernel ${newest} installed, running ${running}"
+    return 0
+  fi
+  [[ -f "$flag" ]] || return 0
+  [[ -f "${flag}.pkgs" ]] && pkgs="$(awk 'NF && !seen[$0]++' "${flag}.pkgs" | paste -sd ' ')"
+  hw="$(tr ' ' '\n' <<<"$pkgs" | grep -E '^linux-|microcode' | paste -sd ' ')"
+  if [[ -z "$pkgs" ]]; then
+    UM_CAP[reboot_reason]="requested by a package update"
+  elif [[ -n "$hw" ]]; then
+    UM_CAP[reboot_reason]="${hw// /, }"
+  else
+    n="$(um_outdated_process_count)"
+    if [[ "$n" -eq 1 ]]; then
+      UM_CAP[restart_reason]="1 process still uses the old ${pkgs// /, }"
+    elif [[ "$n" -gt 1 ]]; then
+      UM_CAP[restart_reason]="${n} processes still use the old ${pkgs// /, }"
+    fi
+  fi
+}
+
 um_probe_health_preflight() {
+  um_probe_restart_needs
   UM_CAP[reboot_required_preflight]=0
-  if [[ -f "$(um_reboot_required_file)" ]]; then UM_CAP[reboot_required_preflight]=1; fi
+  if [[ -n "${UM_CAP[reboot_reason]}" ]]; then UM_CAP[reboot_required_preflight]=1; fi
   if um_probe_command systemctl; then
     um_classify_failed_units
     UM_CAP[failed_units_preflight]="${#UM_FAILED_UNEXPECTED[@]}"

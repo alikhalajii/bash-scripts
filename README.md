@@ -38,7 +38,7 @@ Phases run in this order; each one is skipped if its tool is missing or has noth
 3. **snap:** `snap refresh`.
 4. **flatpak:** `flatpak update` for the system-wide installation (per-user installs are left alone).
 5. **topgrade** (only with `--with-topgrade`): pip, cargo, npm and other user-level tools.
-6. **Stability gate** (only with `--apply`): pending reboot, failed systemd units, interrupted dpkg runs, and a `needrestart` report when installed.
+6. **Stability gate** (only with `--apply`): a reboot needed for a new kernel, firmware or microcode, failed systemd units, interrupted dpkg runs, and a `needrestart` report when installed. Library updates such as `libc6` only add a restart recommendation; they do not fail the run.
 7. **Update summary** (only with `--apply`).
 
 ## Common tasks

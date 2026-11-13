@@ -158,6 +158,9 @@ um_result_print() {
   um_section "Result"
   printf '%s\n' "$verdict"
   for issue in "${next[@]}"; do printf 'Next: %s\n' "$issue"; done
+  if [[ -n "${UM_CAP[restart_reason]:-}" ]]; then
+    printf 'Recommended: reboot or log out and in (%s).\n' "${UM_CAP[restart_reason]}"
+  fi
   for issue in "${UM_ISSUES[@]}"; do printf '  ! %s\n' "$issue"; done
   printf 'Exit code: %s\n' "$rc"
   [[ -n "${UM_LOG_FILE:-}" ]] && printf 'Log: %s\n' "$UM_LOG_FILE"

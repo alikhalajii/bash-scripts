@@ -13,6 +13,9 @@ setup() {
   # Keep the real /tmp clean: logs and temp dirs from tests go here.
   TEST_TMP="$(mktemp -d)"
   export TEST_TMP TMPDIR="$TEST_TMP"
+  # Restart checks read /boot and /proc: use empty fakes so results do not depend on the host.
+  mkdir -p "${TEST_TMP}/boot" "${TEST_TMP}/proc"
+  export UM_BOOT_DIR="${TEST_TMP}/boot" UM_PROC_DIR="${TEST_TMP}/proc"
 }
 
 teardown() {
@@ -140,7 +143,7 @@ um_cli() {
   "
   rm -f "$tmpf" "${tmpf}.pkgs"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"REBOOT REQUIRED (packages: linux-image-6.8 libc6)"* ]]
+  [[ "$output" == *"REBOOT REQUIRED (linux-image-6.8)"* ]]
 }
 
 @test "manifest warns about exit 2 when only a reboot is pending, also in a dry run" {
@@ -717,10 +720,10 @@ SH
 @test "result block explains exit 2 with the stability reasons and lists issues" {
   source "${UM_LIB}/summary.sh"
   UM_APPLY=1 UM_LOG_FILE=/x.log
-  UM_CAP[stability_issues]="reboot required (libc6)"
+  UM_CAP[stability_issues]="reboot required (linux-image-7.0.0-44-generic)"
   UM_ISSUES=("warning: held packages may block some upgrades")
   run um_result_print 2
-  [[ "$output" == *"Updates applied, but the system needs attention: reboot required (libc6)"* ]]
+  [[ "$output" == *"Updates applied, but the system needs attention: reboot required (linux-image-7.0.0-44-generic)"* ]]
   [[ "$output" == *"Next: reboot to finish the update."* ]]
   [[ "$output" != *"failed units"* ]]
   [[ "$output" == *"Exit code: 2"* ]]
@@ -745,7 +748,7 @@ SH
   um_reboot_required_file() { echo "$rf"; }
   um_probe_command() { return 1; }
   um_stability_gate >/dev/null || true
-  [ "${UM_CAP[stability_issues]}" = "reboot required (libc6, linux-image-x)" ]
+  [ "${UM_CAP[stability_issues]}" = "reboot required (linux-image-x)" ]
 }
 
 @test "result block points at failed units only when units failed" {
@@ -766,3 +769,66 @@ SH
   [ "${#UM_ISSUES[@]}" -eq 0 ]
 }
 
+# A fake process whose maps show a replaced (deleted) library.
+fake_outdated_proc() {
+  mkdir -p "${UM_PROC_DIR}/$1"
+  echo "7f00-7f01 r-xp 0 08:01 1 /usr/lib/x86_64-linux-gnu/libc.so.6 (deleted)" > "${UM_PROC_DIR}/$1/maps"
+}
+
+@test "a newer installed kernel means a reboot is required" {
+  local running; running="$(uname -r)"
+  touch "${UM_BOOT_DIR}/vmlinuz-999.0.0-1-${running##*-}"
+  um_reboot_required_file() { echo /nonexistent; }
+  um_probe_restart_needs
+  [ "${UM_CAP[reboot_reason]}" = "kernel 999.0.0-1-${running##*-} installed, running ${running}" ]
+}
+
+@test "a library-only reboot flag recommends a restart while processes use the old files" {
+  local rf="${TEST_TMP}/reboot-required"
+  : > "$rf"; printf 'libc6\nlibc6\n' > "${rf}.pkgs"
+  um_reboot_required_file() { echo "$rf"; }
+  fake_outdated_proc 100; fake_outdated_proc 101
+  mkdir -p "${UM_PROC_DIR}/102"; echo "7f00-7f01 r-xp 0 08:01 1 /usr/lib/libz.so.1" > "${UM_PROC_DIR}/102/maps"
+  um_probe_restart_needs
+  [ -z "${UM_CAP[reboot_reason]}" ]
+  [ "${UM_CAP[restart_reason]}" = "2 processes still use the old libc6" ]
+}
+
+@test "a library-only reboot flag shows nothing once no process uses the old files" {
+  local rf="${TEST_TMP}/reboot-required"
+  : > "$rf"; printf 'libc6\n' > "${rf}.pkgs"
+  um_reboot_required_file() { echo "$rf"; }
+  um_probe_restart_needs
+  [ -z "${UM_CAP[reboot_reason]}" ]
+  [ -z "${UM_CAP[restart_reason]}" ]
+}
+
+@test "stability gate passes on a library-only reboot flag and recommends a restart" {
+  local rf="${TEST_TMP}/reboot-required"
+  : > "$rf"; printf 'libc6\n' > "${rf}.pkgs"
+  fake_outdated_proc 100
+  run bash -c "
+    source '${UM_LIB}/common.sh'
+    source '${UM_LIB}/probe.sh'
+    source '${UM_LIB}/stability.sh'
+    export UM_IGNORE_STABILITY=0
+    UM_CAP[needrestart_available]=0
+    dpkg() { return 1; }
+    systemctl() { return 0; }
+    um_reboot_required_file() { echo '${rf}'; }
+    um_stability_gate
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Restart recommended: 1 process still uses the old libc6"* ]]
+  [[ "$output" != *"REBOOT REQUIRED"* ]]
+}
+
+@test "result block shows a restart recommendation on a successful run" {
+  source "${UM_LIB}/summary.sh"
+  UM_APPLY=1
+  UM_CAP[restart_reason]="131 processes still use the old libc6"
+  run um_result_print 0
+  [[ "$output" == *"Done: updates applied and the system looks healthy."* ]]
+  [[ "$output" == *"Recommended: reboot or log out and in (131 processes still use the old libc6)."* ]]
+  [[ "$output" == *"Exit code: 0"* ]]
+}

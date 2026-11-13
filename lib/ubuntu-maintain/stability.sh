@@ -18,14 +18,15 @@ um_stability_gate() {
     fi
   fi
 
-  local reboot_file pkgs
-  reboot_file="$(um_reboot_required_file)"
-  if [[ -f "$reboot_file" ]]; then
-    pkgs=""; [[ -f "${reboot_file}.pkgs" ]] && pkgs="$(awk 'NF && !seen[$0]++' "${reboot_file}.pkgs" | paste -sd ' ')"
-    um_log "REBOOT REQUIRED${pkgs:+ (packages: ${pkgs})}"
-    reasons+=("reboot required${pkgs:+ (${pkgs// /, })}")
+  um_probe_restart_needs
+  if [[ -n "${UM_CAP[reboot_reason]}" ]]; then
+    um_log "REBOOT REQUIRED (${UM_CAP[reboot_reason]})"
+    reasons+=("reboot required (${UM_CAP[reboot_reason]})")
     if um_is_wsl; then um_log "  on WSL: run 'wsl --shutdown' on the host, then reopen the distro"; fi
     if [[ "${UM_IGNORE_STABILITY}" -eq 0 ]]; then rc="${UM_EXIT_STABILITY}"; fi
+  elif [[ -n "${UM_CAP[restart_reason]}" ]]; then
+    # Not a failure: the update is installed; running programs pick it up when restarted.
+    um_log "Restart recommended: ${UM_CAP[restart_reason]}"
   fi
 
   if um_probe_command systemctl; then
