@@ -2,12 +2,12 @@
 
 ## Running ubuntu-maintain
 
-| Requirement | Notes |
-| --- | --- |
-| Ubuntu 18.04+ or Debian | CI tests Ubuntu 20.04, 22.04, 24.04, 26.04. 18.04 and 20.04 are past standard support: best effort. |
-| bash 4.4+ | Uses associative arrays. |
-| apt-get, GNU coreutils | Present on every Ubuntu/Debian install. |
-| sudo, or running as root | Needed for `--apply` only. |
+| Requirement              | Notes                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| Ubuntu 18.04+ or Debian  | CI tests Ubuntu 20.04, 22.04, 24.04, 26.04. 18.04 and 20.04 are past standard support: best effort. |
+| bash 4.4+                | Uses associative arrays.                                                                            |
+| apt-get, GNU coreutils   | Present on every Ubuntu/Debian install.                                                             |
+| sudo, or running as root | Needed for `--apply` only.                                                                          |
 
 Optional. Each is detected at runtime, and its phase is skipped when it is missing or has nothing installed:
 
@@ -18,10 +18,10 @@ Optional. Each is detected at runtime, and its phase is skipped when it is missi
 
 ## Development
 
-| Tool | Purpose |
-| --- | --- |
+| Tool                                           | Purpose                                                        |
+| ---------------------------------------------- | -------------------------------------------------------------- |
 | [bats](https://github.com/bats-core/bats-core) | Runs `tests/ubuntu-maintain.bats`. CI uses the Ubuntu package. |
-| [shellcheck](https://www.shellcheck.net/) | Static analysis; CI fails on warnings |
+| [shellcheck](https://www.shellcheck.net/)      | Static analysis; CI fails on warnings                          |
 
 Install both from the Ubuntu archive (universe):
 

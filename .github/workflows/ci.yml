@@ -33,7 +33,7 @@ jobs:
     container: ubuntu:${{ matrix.ubuntu }}
     defaults:
       run:
-        shell: bash   # bash -eo pipefail: a failing run is not hidden by tee
+        shell: bash # bash -eo pipefail: a failing run is not hidden by tee
     steps:
       - uses: actions/checkout@v5
       - name: dry run

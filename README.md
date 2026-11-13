@@ -55,32 +55,32 @@ ubuntu-maintain --apply --ignore-stability # do not exit 2 for known, unrelated 
 
 ## Options
 
-| Option | Effect |
-| --- | --- |
-| `--apply` | Make changes. Without it, everything is a dry run. |
-| `--mode daily\|monthly` | `daily` (default) upgrades only; `monthly` adds the cleanup above. |
-| `--aggressive` | Use `apt-get dist-upgrade`, which may remove packages. |
-| `--manifest-only` | Print the manifest and exit. |
-| `--with-topgrade` | Run [topgrade](https://github.com/topgrade-rs/topgrade) after the system package managers. |
+| Option                     | Effect                                                                                                                      |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `--apply`                  | Make changes. Without it, everything is a dry run.                                                                          |
+| `--mode daily\|monthly`    | `daily` (default) upgrades only; `monthly` adds the cleanup above.                                                          |
+| `--aggressive`             | Use `apt-get dist-upgrade`, which may remove packages.                                                                      |
+| `--manifest-only`          | Print the manifest and exit.                                                                                                |
+| `--with-topgrade`          | Run [topgrade](https://github.com/topgrade-rs/topgrade) after the system package managers.                                  |
 | `--continue-on-pm-failure` | Keep going after a snap, flatpak, or topgrade failure. The exit code still reports it. An apt failure always stops the run. |
-| `--ignore-stability` | Do not exit 2 for failed units, a pending reboot, or dpkg errors. |
-| `--restart-services` | Let needrestart restart affected services automatically. Use with care. |
-| `--log-file PATH` | Write the log to `PATH` instead of the default (see [Logs](#logs)). |
-| `-h`, `--help` | Show help. |
+| `--ignore-stability`       | Do not exit 2 for failed units, a pending reboot, or dpkg errors.                                                           |
+| `--restart-services`       | Let needrestart restart affected services automatically. Use with care.                                                     |
+| `--log-file PATH`          | Write the log to `PATH` instead of the default (see [Logs](#logs)).                                                         |
+| `-h`, `--help`             | Show help.                                                                                                                  |
 
 Setting `UPDATE_APPLY=1` in the environment is the same as `--apply`.
 
 ## Exit codes
 
-| Code | Meaning |
-| --- | --- |
-| 0 | Success (a dry run always exits 0) |
-| 2 | Updates finished, but the stability gate found issues (reboot required, failed units, dpkg errors) |
-| 10 | apt phase failed |
-| 11 | snap phase failed |
-| 12 | flatpak phase failed |
-| 13 | topgrade phase failed |
-| 64 | Usage error: unknown option, missing value, sudo missing, sudo authentication failed, or the tool's files are writable by other users |
+| Code | Meaning                                                                                                                               |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Success (a dry run always exits 0)                                                                                                    |
+| 2    | Updates finished, but the stability gate found issues (reboot required, failed units, dpkg errors)                                    |
+| 10   | apt phase failed                                                                                                                      |
+| 11   | snap phase failed                                                                                                                     |
+| 12   | flatpak phase failed                                                                                                                  |
+| 13   | topgrade phase failed                                                                                                                 |
+| 64   | Usage error: unknown option, missing value, sudo missing, sudo authentication failed, or the tool's files are writable by other users |
 
 Exit 2 is deliberate, so scheduled runs do not report an unhealthy system as green. Units that are expected to fail in the current environment (e.g. `tpm-udev` on machines without a TPM, including WSL) are listed separately and do not cause exit 2. See [Troubleshooting](docs/TROUBLESHOOTING.md#stability-gate-exit-2).
 

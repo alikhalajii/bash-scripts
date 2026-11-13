@@ -37,10 +37,10 @@ Research and implementation (2026) showed that **lock strategy must be probe-dri
 
 There is **no** documented `APT::Lock::Timeout`. The supported knob is **`DPkg::Lock::Timeout`** (seconds; `-1` = wait indefinitely), available in **apt ≥ 1.9.11** (February 2020).
 
-| Ubuntu | Typical apt | Built-in lock wait via apt |
-|--------|-------------|----------------------------|
-| 18.04 | 1.6.x | No — use bounded `fuser`/`lsof` poll |
-| 20.04+ | 2.0+ | Yes — pass per invocation |
+| Ubuntu | Typical apt | Built-in lock wait via apt           |
+| ------ | ----------- | ------------------------------------ |
+| 18.04  | 1.6.x       | No — use bounded `fuser`/`lsof` poll |
+| 20.04+ | 2.0+        | Yes — pass per invocation            |
 
 Pass timeout on **each** `apt-get` call (do not write system-wide `apt.conf.d` unless the operator opts in):
 
@@ -54,13 +54,13 @@ In `ubuntu-maintain`, `um_apt_lock_opts` emits these options only when `apt_lock
 
 `apt-config dump` prints `Key "value";` lines. apt ≥ 1.9.11 ships the knob as a **binary-scoped default**, not as a plain key (key case varies by release):
 
-| Ubuntu | apt | `apt-config dump \| grep Lock::Timeout` |
-|--------|-----|-------------------------------------------|
-| 18.04 | 1.6.17 | *(absent)* |
-| 20.04 | 2.0.10 | `Binary::apt::DPkg::Lock::Timeout "120";` |
-| 22.04 | 2.4.14 | `Binary::apt::DPkg::Lock::Timeout "120";` |
-| 24.04 | 2.8.3 | `Binary::apt::DPkg::Lock::Timeout "120";` (`binary::` on some hosts) |
-| 26.04 | 3.2.1 | `Version::2.0::Dpkg::Lock::Timeout "120";` |
+| Ubuntu | apt    | `apt-config dump \| grep Lock::Timeout`                              |
+| ------ | ------ | -------------------------------------------------------------------- |
+| 18.04  | 1.6.17 | _(absent)_                                                           |
+| 20.04  | 2.0.10 | `Binary::apt::DPkg::Lock::Timeout "120";`                            |
+| 22.04  | 2.4.14 | `Binary::apt::DPkg::Lock::Timeout "120";`                            |
+| 24.04  | 2.8.3  | `Binary::apt::DPkg::Lock::Timeout "120";` (`binary::` on some hosts) |
+| 26.04  | 3.2.1  | `Version::2.0::Dpkg::Lock::Timeout "120";`                           |
 
 (Verified in `ubuntu:<version>` containers, 2026-09-29; 26.04 on a host, 2026-11-07.) The scoped default applies to the `apt` front-end only — `apt-get` defaults to no wait, which is why the option must be passed per call. Its presence is still the support signal. Parse case-insensitively; an operator-set unscoped `DPkg::Lock::Timeout` wins over the scoped default:
 

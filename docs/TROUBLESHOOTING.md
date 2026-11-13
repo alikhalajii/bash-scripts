@@ -25,7 +25,7 @@ The tool also exits **64** if `sudo` is not installed or the password is wrong.
 
 Almost always caused by a **broken third-party apt source**, not by ubuntu-maintain. The `E:` lines from `apt-get update` in the log name the failing source.
 
-Only apt *errors* (`E:`) stop the run: a hash sum mismatch, a bad signature, or a malformed source line. A source that is merely unreachable gives a warning (`W: Failed to fetch ...`); apt then uses its old lists for that source and the run continues with exit 0. Check the log for `W:` lines if a repo's updates seem to be missing.
+Only apt _errors_ (`E:`) stop the run: a hash sum mismatch, a bad signature, or a malformed source line. A source that is merely unreachable gives a warning (`W: Failed to fetch ...`); apt then uses its old lists for that source and the run continues with exit 0. Check the log for `W:` lines if a repo's updates seem to be missing.
 
 If apt's package lists are locked by another process, such as the `apt-daily` timer, the tool retries `apt-get update` for up to 120 seconds before giving up.
 
@@ -67,7 +67,7 @@ The gate reports a pending reboot (`/var/run/reboot-required`), failed systemd u
 
 Exit 2 is deliberate, so automation does not report an unhealthy system as green.
 
-**Units expected to fail are not counted.** When a unit fails because its precondition is missing, the gate lists it under *"Failed units expected in this environment (can be ignored)"* and does not exit 2. Currently this covers `tpm-udev.path` and `tpm-udev.service` when no `/dev/tpm*` exists (always on WSL, and on VMs without a virtual TPM). To add a case, extend `um_unit_expected_failure` in `lib/ubuntu-maintain/probe.sh`.
+**Units expected to fail are not counted.** When a unit fails because its precondition is missing, the gate lists it under _"Failed units expected in this environment (can be ignored)"_ and does not exit 2. Currently this covers `tpm-udev.path` and `tpm-udev.service` when no `/dev/tpm*` exists (always on WSL, and on VMs without a virtual TPM). To add a case, extend `um_unit_expected_failure` in `lib/ubuntu-maintain/probe.sh`.
 
 ## Log file warnings
 
