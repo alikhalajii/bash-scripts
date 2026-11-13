@@ -219,13 +219,19 @@ um_outdated_process_count() {
 um_probe_restart_needs() {
   UM_CAP[reboot_reason]=""
   UM_CAP[restart_reason]=""
-  local flag running flavor newest pkgs="" hw n
+  local flag running flavor newest pkgs="" hw n btime
   flag="$(um_reboot_required_file)"
   running="$(uname -r)"
   flavor="${running##*-}"
+  # Unknown boot time (no /proc/stat): every installed kernel counts.
+  btime="$(awk '$1 == "btime" {print $2}' "${UM_PROC_DIR:-/proc}/stat" 2>/dev/null)" || btime=""
+  # Only kernels installed since this boot count: a newer one installed before it means
+  # an older kernel was booted on purpose. ctime, not mtime: dpkg sets mtime to build time.
   newest="$( { echo "$running"
                for f in "${UM_BOOT_DIR:-/boot}"/vmlinuz-*-"$flavor"; do
-                 [[ -e "$f" ]] && echo "${f##*/vmlinuz-}"
+                 [[ -e "$f" ]] || continue
+                 [[ -n "$btime" && "$(stat -c %Z -- "$f")" -lt "$btime" ]] && continue
+                 echo "${f##*/vmlinuz-}"
                done; } | sort -V | tail -n1)"
   if [[ "$newest" != "$running" ]]; then
     UM_CAP[reboot_reason]="kernel ${newest} installed, running ${running}"

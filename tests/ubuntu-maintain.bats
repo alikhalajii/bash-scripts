@@ -859,6 +859,25 @@ fake_outdated_proc() {
   [ "${UM_CAP[reboot_reason]}" = "dbus" ]
 }
 
+@test "a newer kernel installed before this boot is not a pending reboot (older kernel booted on purpose)" {
+  local running; running="$(uname -r)"
+  touch "${UM_BOOT_DIR}/vmlinuz-999.0.0-1-${running##*-}"
+  # The file's ctime (its install time) is now, so a boot "in an hour" came after it.
+  echo "btime $(( $(date +%s) + 3600 ))" > "${UM_PROC_DIR}/stat"
+  um_reboot_required_file() { echo /nonexistent; }
+  um_probe_restart_needs
+  [ -z "${UM_CAP[reboot_reason]}" ]
+}
+
+@test "a newer kernel installed after this boot is a pending reboot" {
+  local running; running="$(uname -r)"
+  touch "${UM_BOOT_DIR}/vmlinuz-999.0.0-1-${running##*-}"
+  echo "btime $(( $(date +%s) - 3600 ))" > "${UM_PROC_DIR}/stat"
+  um_reboot_required_file() { echo /nonexistent; }
+  um_probe_restart_needs
+  [ "${UM_CAP[reboot_reason]}" = "kernel 999.0.0-1-${running##*-} installed, running ${running}" ]
+}
+
 @test "result block lists a repeated warning once" {
   source "${UM_LIB}/summary.sh"
   UM_APPLY=0
