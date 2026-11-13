@@ -629,15 +629,20 @@ SH
   [[ "$output" == *"Removed:   1  (libc6:i386)"* ]]
 }
 
-@test "entry point warns when its code is writable by other users" {
+@test "entry point warns (user) or refuses (root) when its code is writable by other users" {
   local copy="${TEST_TMP}/repo"
   mkdir -p "$copy"
   cp -R "${ROOT}/bin" "${ROOT}/lib" "$copy/"
   chmod -R go-w "$copy"
   chmod o+w "${copy}/lib/ubuntu-maintain/dag.sh"
   run "${copy}/bin/ubuntu-maintain" --log-file "${TEST_TMP}/um.log" --manifest-only
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"dag.sh is writable by other users"* ]]
+  if [[ "$EUID" -eq 0 ]]; then
+    [ "$status" -eq 64 ]
+    [[ "$output" == *"dag.sh is writable by other users; refusing to run as root"* ]]
+  else
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"dag.sh is writable by other users; --apply will refuse"* ]]
+  fi
   chmod o-w "${copy}/lib/ubuntu-maintain/dag.sh"
   run "${copy}/bin/ubuntu-maintain" --log-file "${TEST_TMP}/um.log" --manifest-only
   [[ "$output" != *"writable by other users"* ]]
