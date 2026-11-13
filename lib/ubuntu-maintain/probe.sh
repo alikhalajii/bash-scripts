@@ -242,9 +242,9 @@ um_probe_restart_needs() {
   else
     n="$(um_outdated_process_count)"
     if [[ "$n" -eq 1 ]]; then
-      UM_CAP[restart_reason]="1 process still uses the old ${pkgs// /, }"
+      UM_CAP[restart_reason]="1 process still uses replaced libraries after the ${pkgs// /, } update"
     elif [[ "$n" -gt 1 ]]; then
-      UM_CAP[restart_reason]="${n} processes still use the old ${pkgs// /, }"
+      UM_CAP[restart_reason]="${n} processes still use replaced libraries after the ${pkgs// /, } update"
     fi
   fi
 }

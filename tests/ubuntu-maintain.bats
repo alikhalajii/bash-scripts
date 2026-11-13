@@ -791,7 +791,7 @@ fake_outdated_proc() {
   mkdir -p "${UM_PROC_DIR}/102"; echo "7f00-7f01 r-xp 0 08:01 1 /usr/lib/libz.so.1" > "${UM_PROC_DIR}/102/maps"
   um_probe_restart_needs
   [ -z "${UM_CAP[reboot_reason]}" ]
-  [ "${UM_CAP[restart_reason]}" = "2 processes still use the old libc6" ]
+  [ "${UM_CAP[restart_reason]}" = "2 processes still use replaced libraries after the libc6 update" ]
 }
 
 @test "a library-only reboot flag shows nothing once no process uses the old files" {
@@ -819,17 +819,17 @@ fake_outdated_proc() {
     um_stability_gate
   "
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Restart recommended: 1 process still uses the old libc6"* ]]
+  [[ "$output" == *"Restart recommended: 1 process still uses replaced libraries after the libc6 update"* ]]
   [[ "$output" != *"REBOOT REQUIRED"* ]]
 }
 
 @test "result block shows a restart recommendation on a successful run" {
   source "${UM_LIB}/summary.sh"
   UM_APPLY=1
-  UM_CAP[restart_reason]="131 processes still use the old libc6"
+  UM_CAP[restart_reason]="131 processes still use replaced libraries after the libc6 update"
   run um_result_print 0
   [[ "$output" == *"Done: updates applied and the system looks healthy."* ]]
-  [[ "$output" == *"Recommended: reboot or log out and in (131 processes still use the old libc6)."* ]]
+  [[ "$output" == *"Recommended: reboot or log out and in (131 processes still use replaced libraries after the libc6 update)."* ]]
   [[ "$output" == *"Exit code: 0"* ]]
 }
 
