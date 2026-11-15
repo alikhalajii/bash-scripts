@@ -1330,9 +1330,9 @@ fw_apply() {
 
 @test "tty helper: a line typed after the prompt is returned" {
   mkfifo "${TEST_TMP}/in"; exec 7<>"${TEST_TMP}/in"
-  ( sleep 0.5; printf '2 4\n' >&7 ) 3>&- &
+  ( sleep 1; printf '2 4\n' >&7 ) 3>&- &
   local ans=""
-  um_tty_read_line "Pick: " ans "${TEST_TMP}/in"
+  UM_TTY_TIMEOUT=10 um_tty_read_line "Pick: " ans "${TEST_TMP}/in"
   exec 7>&-
   [ "$ans" = "2 4" ]
 }

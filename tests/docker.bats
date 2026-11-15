@@ -1,6 +1,8 @@
 #!/usr/bin/env bats
-# Docker cleanup (lib/ubuntu-maintain/docker.sh). No test reaches a real Docker daemon:
-# the binary is a fake, and the socket path is a temp file.
+# docker.bats — Tests for the Docker cleanup (lib/ubuntu-maintain/docker.sh). No test
+# reaches a real Docker daemon: docker is tests/fixtures/docker/fake-docker, the socket a
+# temp file.
+# Example: bats tests/docker.bats -f 'docker pick'
 
 bats_require_minimum_version 1.5.0
 
@@ -29,6 +31,8 @@ teardown() {
 # with a real socket file; the module is pointed at it and sees no container, no systemd.
 fake_docker() {
   local d="${TEST_TMP}/dk" fx="${BATS_TEST_DIRNAME}/fixtures/docker"
+  # A forbidden call from an earlier part of this test must not be wiped out.
+  if [ -e "$d/forbidden" ]; then printf 'forbidden docker calls:\n'; cat "$d/forbidden"; return 1; fi
   rm -rf "$d"; mkdir -p "$d"
   cp "$fx"/state/* "$d"/
   if [ -n "${1:-}" ]; then cp "$fx/state-$1"/* "$d"/; fi
@@ -61,7 +65,8 @@ item() {
 removal_calls() { grep -E $'^(container\trm|image\trm|builder\tprune)' "${TEST_TMP}/dk/calls" || true; }
 
 assert_readonly_calls() {
-  [ -z "$(removal_calls)" ] && [ ! -e "${TEST_TMP}/dk/forbidden" ]
+  [ -z "$(removal_calls)" ]
+  [ ! -e "${TEST_TMP}/dk/forbidden" ]
 }
 
 @test "docker size: decimal units, fractions, leading zeros, df suffix" {
@@ -111,7 +116,8 @@ assert_readonly_calls() {
   grep -qx 'DOCKER_HOST=unix:///run/docker.sock' "$TEST_TMP/env"
   grep -qx 'LC_ALL=C' "$TEST_TMP/env"
   run ! grep -E '^(DOCKER_CONTEXT|HOME|BUILDX_BUILDER|TEST_TMP)=' "$TEST_TMP/env"
-  [ ! -s "$TEST_TMP/cfg" ] && [ ! -s "$TEST_TMP/stdin" ]
+  [ ! -s "$TEST_TMP/cfg" ]
+  [ ! -s "$TEST_TMP/stdin" ]
   [ ! -e "$(cat "$TEST_TMP/cfgpath")" ]
 }
 
@@ -133,7 +139,8 @@ assert_readonly_calls() {
 @test "docker hooks: UM_DOCKER_BIN and UM_DOCKER_SOCK are ignored as root" {
   printf '#!/bin/bash\n' > "$TEST_TMP/docker"; chmod 755 "$TEST_TMP/docker"
   export UM_DOCKER_BIN="$TEST_TMP/docker" UM_DOCKER_SOCK="$TEST_TMP/sock"
-  [ "$(um_docker_sock)" = "$TEST_TMP/sock" ] && [ "$(um_docker_bin)" = "$TEST_TMP/docker" ]
+  [ "$(um_docker_sock)" = "$TEST_TMP/sock" ]
+  [ "$(um_docker_bin)" = "$TEST_TMP/docker" ]
   um_docker_is_root() { return 0; }
   [ "$(um_docker_sock)" = /run/docker.sock ]
   [ "$(um_docker_bin || true)" != "$TEST_TMP/docker" ]
@@ -159,7 +166,8 @@ assert_readonly_calls() {
 
 @test "docker probe: not installed is silent and unavailable" {
   um_probe_docker
-  [ "${UM_CAP[docker_available]}" = 0 ] && [ -z "${UM_CAP[docker_note]}" ]
+  [ "${UM_CAP[docker_available]}" = 0 ]
+  [ -z "${UM_CAP[docker_note]}" ]
   [ "${UM_CAP[docker_running]}" = n/a ]
 }
 
@@ -194,12 +202,14 @@ assert_readonly_calls() {
   fake_docker; unset UM_DOCKER_SOCK; um_docker_has_systemd() { return 0; }
   fake_bin systemctl 'exit 3'
   um_probe_docker
-  [ "${UM_CAP[docker_running]}" = 0 ] && [ ! -s "$TEST_TMP/dk/calls" ]
+  [ "${UM_CAP[docker_running]}" = 0 ]
+  [ ! -s "$TEST_TMP/dk/calls" ]
 }
 
 @test "docker probe: no socket means not running, without calling docker" {
   fake_docker; rm "$TEST_TMP/dk/docker.sock"; um_probe_docker
-  [ "${UM_CAP[docker_running]}" = 0 ] && [ ! -s "$TEST_TMP/dk/calls" ]
+  [ "${UM_CAP[docker_running]}" = 0 ]
+  [ ! -s "$TEST_TMP/dk/calls" ]
 }
 
 @test "docker probe: unreadable daemon as non-root suggests --apply, never the group" {
@@ -212,25 +222,34 @@ assert_readonly_calls() {
   fake_docker; UM_MODE=daily um_probe_docker
   grep -q "^version" "$TEST_TMP/dk/calls"
   run ! grep -q "^system" "$TEST_TMP/dk/calls"
-  [ "${UM_CAP[docker_running]}" = 1 ] && [ "${UM_CAP[docker_removable_images]}" = n/a ]
+  [ "${UM_CAP[docker_running]}" = 1 ]
+  [ "${UM_CAP[docker_removable_images]}" = n/a ]
 }
 
 @test "docker probe: monthly counts removable images and stopped containers" {
   fake_docker; UM_MODE=monthly um_probe_docker > /dev/null
-  [ "${UM_CAP[docker_removable_images]}" = 4 ] && [ "${UM_CAP[docker_stopped_containers]}" = 2 ]
+  [ "${UM_CAP[docker_removable_images]}" = 4 ]
+  [ "${UM_CAP[docker_stopped_containers]}" = 2 ]
 }
 
 @test "docker collect: items numbered in display order" {
   fake_docker; collect
-  [ "${UM_DK_NAME[1]}" = old-web ] && [ "${UM_DK_DATE[1]}" = "never run" ]
-  [ "${UM_DK_NAME[2]%% *}" = old-db ] && [ "${UM_DK_DATE[2]}" = 2026-05-02 ]
-  [ "${UM_DK_NAME[3]}" = demo/big:3 ] && [ "${UM_DK_NEEDS[4]}" = "1 2" ]
-  [ "${UM_DK_TAGS[5]}" = "demo/base:1 demo/base:latest" ] && [ "${UM_DK_DATE[5]}" = unknown ]
-  [ "${UM_DK_NAME[6]}" = "<none> 0e0e0e0e0e0e" ] && [ -z "${UM_DK_TAGS[6]}" ]
-  [ "${UM_DK_KIND[7]}" = cache ] && [ "${#UM_DK_ID[@]}" -eq 7 ]
+  [ "${UM_DK_NAME[1]}" = old-web ]
+  [ "${UM_DK_DATE[1]}" = "never run" ]
+  [ "${UM_DK_NAME[2]%% *}" = old-db ]
+  [ "${UM_DK_DATE[2]}" = 2026-05-02 ]
+  [ "${UM_DK_NAME[3]}" = demo/big:3 ]
+  [ "${UM_DK_NEEDS[4]}" = "1 2" ]
+  [ "${UM_DK_TAGS[5]}" = "demo/base:1 demo/base:latest" ]
+  [ "${UM_DK_DATE[5]}" = unknown ]
+  [ "${UM_DK_NAME[6]}" = "<none> 0e0e0e0e0e0e" ]
+  [ -z "${UM_DK_TAGS[6]}" ]
+  [ "${UM_DK_KIND[7]}" = cache ]
+  [ "${#UM_DK_ID[@]}" -eq 7 ]
   [ "${UM_DK_BYTES[7]}" = 1400000000 ]
   [[ "$UM_DK_KEPT" == "Kept: 1 image (420 MB) used by running container app-1" ]]
-  [ "${#UM_DK_VOLUMES[@]}" -eq 3 ] && [ "$UM_DK_VOLTOTAL" = "1.2 GB" ]
+  [ "${#UM_DK_VOLUMES[@]}" -eq 3 ]
+  [ "$UM_DK_VOLTOTAL" = "1.2 GB" ]
 }
 
 @test "docker collect: hostile name neutralized, malformed record dropped" {
@@ -247,7 +266,16 @@ assert_readonly_calls() {
   grep -q 'old-web"	null	null' "$TEST_TMP/dk/containers.tsv"
   UM_MODE=monthly um_docker_collect > "$TEST_TMP/out"
   run ! grep -q warning "$TEST_TMP/out"
-  [ "${UM_DK_NAME[1]}" = old-web ] && [ "${UM_DK_NEEDS[4]}" = "1 2" ]
+  [ "${UM_DK_NAME[1]}" = old-web ]
+  [ "${UM_DK_NEEDS[4]}" = "1 2" ]
+}
+
+@test "docker collect: an image with an unreadable tag is not listed at all" {
+  fake_docker
+  sed -i 's|demo/base:1,demo/base:latest|demo/Base:1,demo/base:latest|' "$TEST_TMP/dk/images.tsv"
+  UM_MODE=monthly um_docker_collect > /dev/null
+  [ "${#UM_DK_ID[@]}" -eq 6 ]
+  [[ "${UM_DK_NAME[*]}" != *demo/base* ]]
 }
 
 @test "docker collect: a failing list call leaves no list and a note" {
@@ -255,12 +283,15 @@ assert_readonly_calls() {
   touch "$TEST_TMP/dk/fail-image"
   run ! um_docker_collect      # status
   um_docker_collect || true    # state, in this shell
-  [ "${#UM_DK_ID[@]}" -eq 0 ] && [[ "${UM_CAP[docker_note]}" == "could not read Docker ("* ]]
+  [ "${#UM_DK_ID[@]}" -eq 0 ]
+  [[ "${UM_CAP[docker_note]}" == "could not read Docker ("* ]]
 }
 
 @test "docker collect: containerd store marks sizes approximate, N/A is unknown" {
   fake_docker containerd; collect
-  [ "$UM_DK_ABOUT" = 1 ] && [ "${UM_DK_NAME[6]}" = demo/big:3 ] && [ -z "${UM_DK_BYTES[6]}" ]
+  [ "$UM_DK_ABOUT" = 1 ]
+  [ "${UM_DK_NAME[6]}" = demo/big:3 ]
+  [ -z "${UM_DK_BYTES[6]}" ]
 }
 
 @test "docker collect: only read-only calls" {
@@ -347,7 +378,8 @@ state_has() { grep -q "$2" "${TEST_TMP}/dk/$1"; }
   for case in "3 n" "3 N" "3 yes" "''" "3 __eof__" "__eof__"; do
     fake_docker; collect; eval "answers=($case)"
     run um_docker_pick_and_remove
-    [ "$status" -ne 0 ] && [[ "$output" == *"othing removed."* ]]
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"othing removed."* ]]
     assert_readonly_calls
   done
 }
