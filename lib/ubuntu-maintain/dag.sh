@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # dag.sh — Run the phases in order and turn their results into one exit code:
-#           probes → manifest → apt → snap → flatpak → journal → topgrade → firmware → gate.
+#           probes → manifest → apt → snap → flatpak → journal → topgrade → docker →
+#           firmware → gate.
 # Provides: um_run_dag
 # Example:  um_run_dag || um_rc=$?        # see --help for the exit codes
 # Sourced by: common.sh → um_source_libs
@@ -93,6 +94,10 @@ um_run_dag() {
       return $(( exit_code != 0 ? exit_code : stab_rc ))
     fi
   fi
+
+  # Not a package manager (monthly only): Docker refuses unsafe removals itself, and a
+  # failed removal is a warning that never changes the exit code.
+  um_docker_phase || true
 
   um_firmware_phase || firmware_rc=$?
   if [[ "$firmware_rc" -ne 0 ]]; then

@@ -173,6 +173,9 @@ um_result_print() {
   if [[ "${UM_CAP[firmware_pending]:-0}" =~ ^[1-9][0-9]*$ ]]; then
     printf 'Recommended: install %s firmware update(s): sudo fwupdmgr update\n' "${UM_CAP[firmware_pending]}"
   fi
+  if [[ -n "${UM_CAP[docker_reclaimable]:-}" ]]; then
+    printf 'Recommended: free Docker space (%s): ubuntu-maintain --apply --mode monthly\n' "${UM_CAP[docker_reclaimable]}"
+  fi
   if [[ "${UM_CAP[firmware_installed]:-0}" -eq 1 ]]; then
     printf 'Recommended: restart to finish the firmware update.\n'
   fi

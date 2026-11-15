@@ -46,6 +46,13 @@ um_manifest_print() {
   um_log "  updates: ${UM_CAP[firmware_updates]:-unknown}"
 
   um_log ""
+  um_log "docker:"
+  um_log "  available: ${UM_CAP[docker_available]:-0}"
+  um_log "  running: ${UM_CAP[docker_running]:-n/a}"
+  um_log "  removable_images: ${UM_CAP[docker_removable_images]:-n/a}"
+  um_log "  stopped_containers: ${UM_CAP[docker_stopped_containers]:-n/a}"
+
+  um_log ""
   um_log "coexistence:"
   um_log "  unattended-upgrades: ${UM_CAP[unattended_upgrades_active]:-unknown}"
   um_log "  apt-daily.timer: ${UM_CAP[apt_daily_active]:-unknown}"
@@ -92,6 +99,9 @@ um_manifest_planned_phases() {
   fi
   if [[ "${UM_WITH_TOPGRADE}" -eq 1 && "${UM_CAP[topgrade_available]:-0}" -eq 1 ]]; then
     um_log "  - topgrade (language/user PMs)"
+  fi
+  if [[ "${UM_MODE}" == "monthly" && "${UM_CAP[docker_available]:-0}" -eq 1 ]]; then
+    um_log "  - docker (report; removing asks first) (monthly)"
   fi
   if [[ "${UM_CAP[firmware_available]:-0}" -eq 1 ]]; then
     um_log "  - firmware (report; installing asks first)"

@@ -4,8 +4,8 @@
 # Provides: um_docker_cmd (the only way to call docker), um_docker_bin, um_docker_sock,
 #           um_docker_size_bytes, um_docker_fmt_size, um_docker_safe_text, um_docker_json_str,
 #           um_docker_parse_pick, um_probe_docker, um_docker_collect (fills UM_DK_*),
-#           um_docker_render, um_docker_pick, um_docker_remove
-# Example:  um_docker_cmd version --format '{{.Server.Version}}'
+#           um_docker_render, um_docker_pick, um_docker_remove, um_docker_phase
+# Example:  um_probe_docker; um_docker_phase      # monthly: list, then pick on a terminal
 # Sourced by: common.sh → um_source_libs
 
 # Declared in common.sh; repeated here so shellcheck can infer the associative-array type.
@@ -15,7 +15,6 @@ declare -gA UM_CAP
 # --format strings: fixed fields first, free text last through {{json}} (control
 # characters escaped, so a name can never shift the fields). tests/fixtures/docker/
 # fake-docker serves exactly these layouts.
-# shellcheck disable=SC2034  # TEMP until render/pick/remove use them (Task 7 removes this)
 if [[ ! -v UM_DK_SEP ]]; then
   readonly UM_DK_SEP=$'\x1f'
   readonly UM_DK_PATH=/usr/sbin:/usr/bin:/sbin:/bin
@@ -293,7 +292,6 @@ um_probe_docker() {
 }
 
 # Empty every collected list (all 1-based, in display order).
-# shellcheck disable=SC2034  # TEMP until render/pick/remove use them (Task 7 removes this)
 um_docker_reset() {
   declare -ga UM_DK_KIND=() UM_DK_ID=() UM_DK_BYTES=() UM_DK_DATE=() UM_DK_NAME=() \
     UM_DK_NOTE=() UM_DK_FROM=() UM_DK_NEEDS=() UM_DK_TAGS=() UM_DK_STARTED=() \
@@ -325,7 +323,6 @@ um_docker_bad_record() { um_log "warning: Docker: skipped an unreadable record";
 # approximate: containerd image store) and UM_DK_TOTAL (known bytes of all items). Every
 # field is validated; a record that fails is skipped with a warning. Returns 1 if a docker
 # call fails: the lists stay empty and UM_CAP[docker_note] says why.
-# shellcheck disable=SC2034  # TEMP until render/pick/remove use them (Task 7 removes this)
 um_docker_collect() {
   local d err="" line k id n b i j name proj tag repo vb vt=0 kept_n=0 kept_b=0
   local -a f=() order=() cs=() is=() vl=()
@@ -692,5 +689,41 @@ um_docker_remove() {
   done
   [[ "${UM_DK_ABOUT:-0}" -eq 1 ]] && how="about"
   um_log "Docker: removed ${r} of ${#UM_DK_PICKED[@]} item(s), ${how} $(um_docker_fmt_size "$freed") freed"
+  return 0
+}
+
+# Monthly Docker section (after um_probe_docker): list what can be removed; with --apply on
+# a terminal ask which items to remove, without one only recommend a terminal run
+# (UM_CAP[docker_reclaimable]). Returns 0: Docker refuses unsafe removals itself, and its
+# refusals are warnings.
+um_docker_phase() {
+  local n
+  [[ "${UM_MODE}" == monthly ]] || return 0
+  [[ "${UM_CAP[docker_available]:-0}" -eq 1 || -n "${UM_CAP[docker_note]:-}" ]] || return 0
+  um_section "Docker"
+  if [[ -n "${UM_CAP[docker_note]:-}" ]]; then
+    um_log "note: ${UM_CAP[docker_note]}"
+    return 0
+  fi
+  if [[ "${UM_CAP[docker_running]:-0}" != 1 ]]; then
+    um_log "Docker: not running; skipped"
+    return 0
+  fi
+  # Re-read under --apply: earlier phases (topgrade) may have pulled images.
+  if [[ "${UM_APPLY}" -eq 1 ]] && ! um_docker_collect; then
+    um_log "note: ${UM_CAP[docker_note]}"
+    return 0
+  fi
+  um_docker_render
+  n="${#UM_DK_KIND[@]}"
+  [[ "$n" -gt 0 ]] || return 0
+  if [[ "${UM_APPLY}" -eq 0 ]]; then
+    um_log "[dry-run] with --apply on a terminal, would ask which of ${n} item(s) to remove"
+  elif um_have_tty; then
+    um_docker_pick && um_docker_remove
+  else
+    um_log "Docker: nothing removed without a terminal."
+    UM_CAP[docker_reclaimable]="$(um_docker_fmt_size "$UM_DK_TOTAL")"
+  fi
   return 0
 }

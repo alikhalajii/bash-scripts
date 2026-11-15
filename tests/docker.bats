@@ -472,3 +472,103 @@ image	rm	--	${UM_DK_ID[5]}" ]
   [ "$(wc -l < "$TEST_TMP/dk/volumes.tsv")" -eq 3 ]
   run ! grep -E $'\t(-f|--force|-v|--volumes)(\t|$)' <(grep -v $'^builder' "$TEST_TMP/dk/calls")
 }
+
+@test "docker phase: dry run lists, asks nothing, reads only" {
+  fake_docker; export UM_MODE=monthly UM_APPLY=0; um_probe_docker > /dev/null
+  um_have_tty() { return 0; }
+  run um_docker_phase
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"=== Docker ==="*"Docker: 7 item(s) can be removed"* ]]
+  [[ "$output" == *"[dry-run] with --apply on a terminal, would ask which of 7 item(s) to remove"* ]]
+  [[ "$output" != *"Remove which?"* ]]
+  assert_readonly_calls
+}
+
+@test "docker phase: apply without terminal reports and recommends" {
+  fake_docker; export UM_MODE=monthly UM_APPLY=1; um_probe_docker > /dev/null
+  um_have_tty() { return 1; }; um_docker_phase > "$TEST_TMP/out"
+  grep -q 'Docker: nothing removed without a terminal' "$TEST_TMP/out"
+  run um_result_print 0
+  [[ "$output" == *"Recommended: free Docker space (2.1 GB): ubuntu-maintain --apply --mode monthly"* ]]
+  assert_readonly_calls
+}
+
+@test "docker phase: apply re-reads the list before asking" {
+  fake_docker; export UM_MODE=monthly UM_APPLY=1; um_probe_docker > /dev/null
+  : > "$TEST_TMP/dk/calls"; um_have_tty() { return 1; }; um_docker_phase > /dev/null
+  grep -q $'^system\tdf\t-v' "$TEST_TMP/dk/calls"
+}
+
+@test "docker phase: answering none or n sets no Recommended line" {
+  local a
+  for a in '' n; do
+    fake_docker; export UM_MODE=monthly UM_APPLY=1; um_probe_docker > /dev/null
+    um_have_tty() { return 0; }; answers=("$a"); [ -z "$a" ] || answers=(3 "$a")
+    um_docker_phase > /dev/null
+    run um_result_print 0
+    [[ "$output" != *"free Docker space"* ]]
+    assert_readonly_calls
+  done
+}
+
+@test "docker phase: not running prints the skipped line" {
+  fake_docker; rm "$TEST_TMP/dk/docker.sock"; export UM_MODE=monthly; um_probe_docker
+  run um_docker_phase
+  [[ "$output" == *"=== Docker ==="*"Docker: not running; skipped"* ]]
+}
+
+@test "docker phase: a note is shown and nothing is read" {
+  fake_docker; touch "$TEST_TMP/dk/fail-version"; export UM_MODE=monthly; um_probe_docker
+  run um_docker_phase
+  [[ "$output" == *"note: could not read Docker without root; run with --apply to list it"* ]]
+  run ! grep -q '^system' "$TEST_TMP/dk/calls"
+}
+
+@test "docker phase: daily mode and no docker print nothing" {
+  fake_docker; export UM_MODE=daily; um_probe_docker
+  run um_docker_phase; [ -z "$output" ]
+  UM_DOCKER_BIN=/nonexistent; export UM_MODE=monthly; um_probe_docker
+  run um_docker_phase; [ -z "$output" ]
+}
+
+@test "docker phase: a failed removal never changes the exit code" {
+  fake_docker; export UM_MODE=monthly UM_APPLY=1; um_probe_docker > /dev/null
+  touch "$TEST_TMP/dk/fail-container-rm"; um_have_tty() { return 0; }; answers=(1 y)
+  run um_docker_phase
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"warning: Docker: could not remove old-web"* ]]
+}
+
+@test "manifest shows the docker block, n/a counts outside monthly" {
+  fake_docker; export UM_MODE=daily; um_probe_docker
+  run um_manifest_print
+  [[ "$output" == *$'docker:\n  available: 1\n  running: 1\n  removable_images: n/a\n  stopped_containers: n/a'* ]]
+  [[ "$output" != *"  - docker"* ]]
+  export UM_MODE=monthly; um_probe_docker > /dev/null
+  run um_manifest_print
+  [[ "$output" == *$'  removable_images: 4\n  stopped_containers: 2'* ]]
+  [[ "$output" == *"  - docker (report; removing asks first) (monthly)"* ]]
+}
+
+@test "manifest shows running n/a when docker is unavailable" {
+  export UM_MODE=monthly; um_probe_docker
+  run um_manifest_print
+  [[ "$output" == *$'docker:\n  available: 0\n  running: n/a'* ]]
+  [[ "$output" != *"  - docker"* ]]
+}
+
+@test "dag runs docker after topgrade and before firmware" {
+  run bash -c "
+    source '${UM_LIB}/common.sh'; um_source_libs
+    UM_APPLY=0 UM_MODE=monthly
+    um_run_probes() { UM_CAP[apt_available]=0; }
+    um_manifest_print() { :; }
+    um_journal_phase() { echo JOURNAL; }
+    um_topgrade_phase() { echo TOPGRADE; }
+    um_docker_phase() { echo DOCKER; return 1; }
+    um_firmware_phase() { echo FIRMWARE; }
+    um_run_dag
+  "
+  [ "$status" -eq 0 ]
+  [ "$(grep -E '^(JOURNAL|TOPGRADE|DOCKER|FIRMWARE)$' <<<"$output" | paste -sd ' ')" = "JOURNAL TOPGRADE DOCKER FIRMWARE" ]
+}
