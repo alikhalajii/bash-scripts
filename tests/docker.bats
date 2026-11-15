@@ -638,3 +638,12 @@ image	rm	--	${UM_DK_ID[5]}" ]
   [ "$status" -eq 0 ]
   [ "$(grep -E '^(JOURNAL|TOPGRADE|DOCKER|FIRMWARE)$' <<<"$output" | paste -sd ' ')" = "JOURNAL TOPGRADE DOCKER FIRMWARE" ]
 }
+
+@test "docker: disk usage and removals get the long time limit" {
+  fake_docker
+  eval "real_$(declare -f um_docker_cmd)"
+  um_docker_cmd() { printf '%s\n' "$*" >> "$TEST_TMP/limits"; real_um_docker_cmd "$@"; }
+  collect; answers=(1-7 y); um_docker_pick_and_remove > /dev/null
+  run ! grep -E '^(system df|container rm|image rm|builder prune)' "$TEST_TMP/limits"
+  [ "$(grep -cE '^--slow (system df|container rm|image rm|builder prune)' "$TEST_TMP/limits")" -eq 10 ]
+}

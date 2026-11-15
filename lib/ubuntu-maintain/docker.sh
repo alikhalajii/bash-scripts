@@ -80,7 +80,7 @@ um_docker_tmpdir() {
 
 # um_docker_cmd [--slow] ARGS...: run docker ARGS with nothing from the user's setup: a
 # fresh empty config dir (removed after), fixed PATH, socket and C locale, stdin /dev/null,
-# a time limit (60 s, --slow 300 s). Stdout passes through; on failure the first line of
+# a time limit (60 s; --slow 300 s for disk usage and removals). Stdout passes through; on failure the first line of
 # docker's error, made safe to print, goes to stderr. Returns docker's exit code (124 on
 # timeout; 125 if docker or the config dir is unusable).
 um_docker_cmd() {
@@ -299,13 +299,14 @@ um_docker_reset() {
   declare -g UM_DK_KEPT="" UM_DK_VOLTOTAL="" UM_DK_ABOUT=0 UM_DK_TOTAL=0
 }
 
-# Read everything the list needs into files in DIR (one slow `system df -v`). Returns 1 on
+# Read everything the list needs into files in DIR. Both `system df` calls walk every
+# volume and layer (slow on big disks), so they get the long time limit. Returns 1 on
 # the first failed call; DIR/err then holds docker's error line.
 um_docker_read_all() {
   local d="$1" id
   local -a ids=()
   um_docker_cmd --slow system df -v --format "$UM_DK_FMT_DF" > "$d/df" 2> "$d/err" \
-    && um_docker_cmd system df --format "$UM_DK_FMT_DF_SUM" > "$d/sum" 2> "$d/err" \
+    && um_docker_cmd --slow system df --format "$UM_DK_FMT_DF_SUM" > "$d/sum" 2> "$d/err" \
     && um_docker_cmd image ls --no-trunc --format "$UM_DK_FMT_IMAGES" > "$d/images" 2> "$d/err" \
     && um_docker_cmd ps -a --no-trunc -q > "$d/ps" 2> "$d/err" \
     && um_docker_cmd info --format "$UM_DK_FMT_INFO" > "$d/info" 2> "$d/err" || return 1
@@ -620,7 +621,7 @@ um_docker_remove_container() {
     um_log "warning: Docker: ${name} changed since the list; not removed"
     return 1
   fi
-  if ! err="$(um_docker_cmd container rm -- "$id" 2>&1 >/dev/null)"; then
+  if ! err="$(um_docker_cmd --slow container rm -- "$id" 2>&1 >/dev/null)"; then
     um_log "warning: Docker: could not remove ${name}: ${err}"
     return 1
   fi
@@ -649,12 +650,12 @@ um_docker_remove_image() {
     return 1
   fi
   for t in "${tags[@]:0:${#tags[@]}-1}"; do
-    if ! err="$(um_docker_cmd image rm -- "$t" 2>&1 >/dev/null)"; then
+    if ! err="$(um_docker_cmd --slow image rm -- "$t" 2>&1 >/dev/null)"; then
       um_log "warning: Docker: could not remove ${name}: ${err}"
       return 1
     fi
   done
-  if ! err="$(um_docker_cmd image rm -- "$id" 2>&1 >/dev/null)"; then
+  if ! err="$(um_docker_cmd --slow image rm -- "$id" 2>&1 >/dev/null)"; then
     um_log "warning: Docker: could not remove ${name}: ${err}"
     return 1
   fi
@@ -682,7 +683,7 @@ um_docker_remove() {
           fi ;;
         cache)
           local err
-          if err="$(um_docker_cmd builder prune --all -f 2>&1 >/dev/null)"; then ok=1
+          if err="$(um_docker_cmd --slow builder prune --all -f 2>&1 >/dev/null)"; then ok=1
           else um_log "warning: Docker: could not remove the build cache: ${err}"; fi ;;
       esac
       [[ "$ok" -eq 1 ]] || continue
