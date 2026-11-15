@@ -241,6 +241,15 @@ assert_readonly_calls() {
   [ "${#UM_DK_ID[@]}" -eq 7 ]
 }
 
+@test "docker collect: a label that is not set (null) is empty, not unreadable" {
+  fake_docker
+  sed -i 's|"/old-web"\t""\t""|"/old-web"\tnull\tnull|' "$TEST_TMP/dk/containers.tsv"
+  grep -q 'old-web"	null	null' "$TEST_TMP/dk/containers.tsv"
+  UM_MODE=monthly um_docker_collect > "$TEST_TMP/out"
+  run ! grep -q warning "$TEST_TMP/out"
+  [ "${UM_DK_NAME[1]}" = old-web ] && [ "${UM_DK_NEEDS[4]}" = "1 2" ]
+}
+
 @test "docker collect: a failing list call leaves no list and a note" {
   fake_docker; collect; [ "${#UM_DK_ID[@]}" -eq 7 ]
   touch "$TEST_TMP/dk/fail-image"

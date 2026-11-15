@@ -398,6 +398,9 @@ um_docker_collect() {
   # Containers: stopped ones become items; any other state keeps its image.
   while IFS="$UM_DK_SEP" read -r -a f; do
     [[ ${#f[@]} -gt 0 ]] || continue
+    # A label that is not set prints as null (Docker 29) or "" (older).
+    [[ "${f[7]:-}" == null ]] && f[7]='""'
+    [[ "${f[8]:-}" == null ]] && f[8]='""'
     if [[ ${#f[@]} -ne 10 || ! "${f[0]}" =~ $UM_DK_RE_CONTAINER || ! "${f[1]}" =~ ^[a-z]+$ \
           || ! "${f[2]}" =~ $UM_DK_RE_TIME || ! "${f[3]}" =~ $UM_DK_RE_TIME \
           || ! "${f[4]}" =~ $UM_DK_RE_IMAGE || ! "${f[5]}" =~ ^[a-z-]*$ ]] \
