@@ -159,14 +159,14 @@ pre-commit run --all-files     # run the commit checks on the whole repo
 pre-commit run --all-files --hook-stage pre-push   # run the test suite
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same two `pre-commit` commands, plus a dry run and a real monthly `--apply` in Ubuntu 20.04–26.04 and Debian 12–13 containers. Details: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md#development).
+CI (`.github/workflows/ci.yml`) runs the same two `pre-commit` commands, plus a dry run and a real monthly `--apply` in Ubuntu 20.04–26.04 and Debian 12–13 containers, and the Docker end-to-end test on Docker 28 and 29. Details: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md#development).
 
 ### Repository layout
 
 ```text
 bin/ubuntu-maintain     CLI entry point
 lib/ubuntu-maintain/    modules (probe, manifest, apt, snap, flatpak, journal, topgrade, docker, firmware, stability, summary)
-tests/                  bats tests; tests/fixtures/ holds sample tool output
+tests/                  bats tests; tests/fixtures/ holds sample tool output; tests/e2e/ the Docker end-to-end test
 docs/                   requirements, troubleshooting, operational notes (docs/solutions/)
 update-script.sh        legacy wrapper, same as `ubuntu-maintain --apply`
 .pre-commit-config.yaml pinned quality checks (local hooks and CI)

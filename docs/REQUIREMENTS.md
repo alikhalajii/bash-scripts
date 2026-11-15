@@ -53,3 +53,11 @@ To repeat CI's container check locally (needs Docker; `--apply` changes only the
 docker run --rm -v "$PWD":/r:ro debian:13 bash -c 'cp -r /r /x && chown -R root:root /x && chmod -R go-w /x && cd /x &&
   apt-get update -qq && ./bin/ubuntu-maintain --apply --mode monthly --ignore-stability'
 ```
+
+To run the Docker end-to-end test (needs Docker and network on first use):
+
+```bash
+tests/e2e/docker-dind.sh 29    # or 28
+```
+
+It starts a throwaway docker-in-docker daemon from a pinned `docker:dind` image (about 400 MB, kept for the next run), creates test images and containers inside it, and answers the Docker picker on a pseudo-terminal. It removes only items inside that daemon; your own images, containers and volumes are compared before and after. After about 30 s it prints `e2e (docker 29): ok`.

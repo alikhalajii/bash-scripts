@@ -49,6 +49,8 @@ jobs:
           ./bin/ubuntu-maintain | tee manifest.out
           # apt >= 1.9.11 on every release here, so the native lock wait must be detected.
           grep -q 'lock_wait: dpkg_timeout' manifest.out
+          # No docker here: the Docker block says unavailable and the phase stays silent.
+          sed -n '/^docker:/,/^$/p' manifest.out | grep -qx '  available: 0'
       - name: apply (monthly)
         run: |
           ./bin/ubuntu-maintain --apply --mode monthly --ignore-stability | tee apply.out
@@ -57,3 +59,18 @@ jobs:
         run: |
           ./bin/ubuntu-maintain --mode monthly | tee after.out
           grep -q 'autoremove (before upgrades): 0 package(s)' after.out
+
+  # The Docker phase end to end against a throwaway docker-in-docker daemon (never the
+  # runner's own images): Docker 28 (overlay2 store) and 29 (containerd image store).
+  docker-e2e:
+    name: docker-e2e (docker ${{ matrix.docker }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        docker: ["28", "29"]
+    steps:
+      - uses: actions/checkout@v5
+      - name: pick and remove in docker-in-docker
+        run: tests/e2e/docker-dind.sh ${{ matrix.docker }}
