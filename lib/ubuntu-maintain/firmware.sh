@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # firmware.sh — Firmware phase (fwupd): report updates; install only after a y on a terminal.
-# Provides: um_firmware_phase, um_fw_confirm, um_have_tty, um_fw_can_install
+# Provides: um_firmware_phase, um_system_firmware_line, um_fw_confirm, um_have_tty,
+#           um_fw_can_install
 # Example:  um_firmware_phase || rc=$?    # 0, or UM_EXIT_FIRMWARE (14) if an install failed
 # Sourced by: common.sh → um_source_libs
 
@@ -44,11 +45,29 @@ um_fw_confirm() {
   [[ "$answer" == [yY] ]]
 }
 
+# "System firmware: <version>, released <YYYY-MM-DD>" from DMI (readable without root);
+# nothing when the machine has no DMI data (some VMs, ARM boards). Vendor strings: control
+# characters removed.
+um_system_firmware_line() {
+  local dir="${UM_DMI_DIR:-/sys/class/dmi/id}" ver date
+  ver="$(tr -d '[:cntrl:]' < "${dir}/bios_version" 2>/dev/null)"
+  [[ -n "$ver" ]] || return 0
+  date="$(tr -d '[:cntrl:]' < "${dir}/bios_date" 2>/dev/null)"
+  # DMI dates are MM/DD/YYYY.
+  if [[ "$date" =~ ^([0-9]{2})/([0-9]{2})/([0-9]{4})$ ]]; then
+    date="${BASH_REMATCH[3]}-${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
+  fi
+  printf 'System firmware: %s%s\n' "$ver" "${date:+, released ${date}}"
+}
+
 # Dry run: list pending updates. --apply: refresh metadata, list, ask (terminal only), install.
 # Sets UM_CAP[firmware_pending] or [firmware_installed]. Returns 0 or UM_EXIT_FIRMWARE.
 um_firmware_phase() {
   [[ "${UM_CAP[firmware_available]:-0}" -eq 1 ]] || return 0
   um_section "Firmware"
+  local sysfw
+  sysfw="$(um_system_firmware_line)"
+  [[ -z "$sysfw" ]] || um_log "$sysfw"
 
   if [[ "${UM_APPLY}" -eq 1 ]]; then
     local refresh_rc=0

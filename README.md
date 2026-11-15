@@ -115,7 +115,7 @@ topgrade runs as **your** user, not as root, with its system, snap, and flatpak 
 
 ## Firmware
 
-With `fwupdmgr` (fwupd) installed, every run reports available firmware updates in the manifest and in a Firmware section. Nothing is installed without you:
+With `fwupdmgr` (fwupd) installed, every run reports available firmware updates in the manifest and in a Firmware section, which also shows the system firmware version and its release date. Nothing is installed without you:
 
 - With `--apply` on a terminal, the tool lists the devices and new versions and asks `Install N firmware update(s) now? [y/N]`. No answer within 5 minutes counts as no.
 - From a timer, cron, or any run without a terminal, it never installs; the Result block recommends `sudo fwupdmgr update`.

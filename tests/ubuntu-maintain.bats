@@ -18,7 +18,7 @@ setup() {
   export TEST_TMP TMPDIR="$TEST_TMP"
   # Restart checks read /boot and /proc: use empty fakes so results do not depend on the host.
   mkdir -p "${TEST_TMP}/boot" "${TEST_TMP}/proc"
-  export UM_BOOT_DIR="${TEST_TMP}/boot" UM_PROC_DIR="${TEST_TMP}/proc"
+  export UM_BOOT_DIR="${TEST_TMP}/boot" UM_PROC_DIR="${TEST_TMP}/proc" UM_DMI_DIR="${TEST_TMP}/dmi"
   # Never reach the real fwupd daemon (slow, host-dependent): firmware tests replace this.
   fake_bin fwupdmgr 'exit 1'
 }
@@ -1371,4 +1371,30 @@ fw_apply() {
   [ "$(awk 'length > 80' <<<"$output" | wc -l)" -eq 0 ]
   # Sections in the usual order.
   [ "$(grep -E '^(Usage|Options|Environment|Examples|Exit codes):' <<<"$output" | cut -d: -f1 | paste -sd,)" = "Usage,Options,Environment,Examples,Exit codes" ]
+}
+
+fake_dmi() {
+  mkdir -p "$UM_DMI_DIR"
+  printf '%s\n' "$1" > "${UM_DMI_DIR}/bios_version"
+  printf '%s\n' "$2" > "${UM_DMI_DIR}/bios_date"
+}
+
+@test "firmware: shows the system firmware version and its release date" {
+  fake_dmi 2.36.0 11/26/2025
+  fw_apply; export UM_APPLY=0
+  run um_firmware_phase
+  [[ "$output" == *"System firmware: 2.36.0, released 2025-11-26"* ]]
+}
+
+@test "firmware: no system firmware line without DMI data" {
+  fw_apply; export UM_APPLY=0
+  run um_firmware_phase
+  [[ "$output" != *"System firmware:"* ]]
+}
+
+@test "firmware: unusual date kept as is, control characters removed" {
+  fake_dmi $'1.0\e[2J' "2025"
+  source "${UM_LIB}/firmware.sh"
+  run um_system_firmware_line
+  [ "$output" = "System firmware: 1.0[2J, released 2025" ]
 }
