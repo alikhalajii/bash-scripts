@@ -653,3 +653,16 @@ image	rm	--	${UM_DK_ID[5]}" ]
   run ! grep -E '^(system df|container rm|image rm|builder prune)' "$TEST_TMP/limits"
   [ "$(grep -cE '^--slow (system df|container rm|image rm|builder prune)' "$TEST_TMP/limits")" -eq 10 ]
 }
+
+@test "docker constants: values inherited from the environment are replaced" {
+  run env UM_DK_SEP=x UM_DK_RE_IMAGE=. UM_DK_PATH=/tmp bash -c \
+    'source "$1/docker.sh"; printf "%s|%s|%s" "$UM_DK_SEP" "$UM_DK_RE_IMAGE" "$UM_DK_PATH"' _ "$UM_LIB"
+  [ "$output" = $'\x1f|^sha256:[0-9a-f]{64}$|/usr/sbin:/usr/bin:/sbin:/bin' ]
+}
+
+@test "docker hooks: UM_DOCKER_SNAP_BIN is ignored as root" {
+  UM_DOCKER_SNAP_BIN="$TEST_TMP/snap"
+  [ "$(um_docker_snap_bin)" = "$TEST_TMP/snap" ]
+  um_docker_is_root() { return 0; }
+  [ "$(um_docker_snap_bin)" = /snap/bin/docker ]
+}

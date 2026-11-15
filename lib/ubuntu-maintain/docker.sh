@@ -15,7 +15,11 @@ declare -gA UM_CAP
 # --format strings: fixed fields first, free text last through {{json}} (control
 # characters escaped, so a name can never shift the fields). tests/fixtures/docker/
 # fake-docker serves exactly these layouts.
-if [[ ! -v UM_DK_SEP ]]; then
+# Defined once (re-sourcing keeps them); a value inherited from the environment is replaced.
+if [[ ! -v UM_DK_SEP || "${UM_DK_SEP@a}" != *r* ]]; then
+  unset UM_DK_SEP UM_DK_PATH UM_DK_FMT_DF UM_DK_FMT_DF_SUM UM_DK_FMT_IMAGES UM_DK_FMT_CT \
+    UM_DK_FMT_RECHECK UM_DK_FMT_INFO UM_DK_FMT_IMGID UM_DK_FMT_NTAGS UM_DK_RE_IMAGE \
+    UM_DK_RE_CONTAINER UM_DK_RE_TIME UM_DK_RE_REPO UM_DK_RE_TAG UM_DK_CACHE_NAME
   readonly UM_DK_SEP=$'\x1f'
   readonly UM_DK_PATH=/usr/sbin:/usr/bin:/sbin:/bin
   readonly UM_DK_FMT_DF="{{range .Images}}I${UM_DK_SEP}{{.ID}}${UM_DK_SEP}{{.UniqueSize}}${UM_DK_SEP}{{.CreatedAt}}${UM_DK_SEP}{{.Containers}}
@@ -224,8 +228,19 @@ um_docker_date() {
 
 um_docker_has_systemd() { [[ -d /run/systemd/system ]]; }
 
+# Where snap installs docker: UM_DOCKER_SNAP_BIN (tests; ignored as root) or
+# /snap/bin/docker.
+um_docker_snap_bin() {
+  if ! um_docker_is_root && [[ -n "${UM_DOCKER_SNAP_BIN:-}" ]]; then
+    printf '%s\n' "$UM_DOCKER_SNAP_BIN"
+  else
+    printf '%s\n' /snap/bin/docker
+  fi
+}
+
 # Running inside a container (Docker, LXC, podman...): a mounted host socket would clean the
-# host. WSL reports itself as a container but is a normal machine here.
+# host. WSL reports itself as a container but is a normal machine here. The marker files
+# can be replaced by UM_DOCKER_CONTAINER_FILES (tests; ignored as root).
 um_docker_in_container() {
   local v f files="/.dockerenv /run/.containerenv"
   if v="$(systemd-detect-virt -c 2>/dev/null)" && [[ "$v" != wsl ]]; then return 0; fi
@@ -248,7 +263,7 @@ um_probe_docker() {
   local rc=0 sock i ni=0 nc=0
   um_docker_probe_reset
   um_docker_bin > /dev/null || rc=$?
-  if [[ "$rc" -ne 0 && -e "${UM_DOCKER_SNAP_BIN:-/snap/bin/docker}" ]]; then
+  if [[ "$rc" -ne 0 && -e "$(um_docker_snap_bin)" ]]; then
     UM_CAP[docker_note]="Docker from snap is not supported here"
     return 0
   fi
