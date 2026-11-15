@@ -303,13 +303,21 @@ um_docker_reset() {
 # volume and layer (slow on big disks), so they get the long time limit. Returns 1 on
 # the first failed call; DIR/err then holds docker's error line.
 um_docker_read_all() {
-  local d="$1" id
-  local -a ids=()
+  local d="$1"
   um_docker_cmd --slow system df -v --format "$UM_DK_FMT_DF" > "$d/df" 2> "$d/err" \
     && um_docker_cmd --slow system df --format "$UM_DK_FMT_DF_SUM" > "$d/sum" 2> "$d/err" \
     && um_docker_cmd image ls --no-trunc --format "$UM_DK_FMT_IMAGES" > "$d/images" 2> "$d/err" \
-    && um_docker_cmd ps -a --no-trunc -q > "$d/ps" 2> "$d/err" \
     && um_docker_cmd info --format "$UM_DK_FMT_INFO" > "$d/info" 2> "$d/err" || return 1
+  # A container removed between ps and inspect (docker run --rm) fails the inspect: read
+  # both once more.
+  um_docker_read_containers "$d" || um_docker_read_containers "$d"
+}
+
+# Container IDs (ps -a) and their records (one inspect) into DIR/ct.
+um_docker_read_containers() {
+  local d="$1" id
+  local -a ids=()
+  um_docker_cmd ps -a --no-trunc -q > "$d/ps" 2> "$d/err" || return 1
   while read -r id; do [[ "$id" =~ $UM_DK_RE_CONTAINER ]] && ids+=("$id"); done < "$d/ps"
   : > "$d/ct"
   [[ ${#ids[@]} -eq 0 ]] \

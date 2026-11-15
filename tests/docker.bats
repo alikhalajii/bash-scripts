@@ -303,6 +303,12 @@ exit 0"
   [ "${#UM_DK_ID[@]}" -eq 7 ]
 }
 
+@test "docker collect: a container that vanishes during the read is read again" {
+  fake_docker; touch "$TEST_TMP/dk/fail-once-container-inspect"
+  UM_MODE=monthly um_docker_collect > /dev/null
+  [ "${#UM_DK_ID[@]}" -eq 7 ]
+}
+
 @test "docker collect: a failing list call leaves no list and a note" {
   fake_docker; collect; [ "${#UM_DK_ID[@]}" -eq 7 ]
   touch "$TEST_TMP/dk/fail-image"
