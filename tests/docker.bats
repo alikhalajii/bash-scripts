@@ -348,7 +348,7 @@ exit 0"
   [[ "$output" == *"  1     0 B  never run   old-web, image demo/db:2"* ]]
   [[ "$output" == *'Docker does not record when an image was last used; "built" = build date.'* ]]
   [[ "$output" == *"  #   frees  built       image"* ]]
-  [[ "$output" == *"  4  210 MB  2025-09-01  demo/db:2 (used by stopped 1,2: pick both)"* ]]
+  [[ "$output" == *"  4  210 MB  2025-09-01  demo/db:2 (used by stopped 1,2: pick it with them)"* ]]
   [[ "$output" == *"  5  100 MB  unknown     demo/base:1, demo/base:latest"* ]]
   [[ "$output" == *"old-db [compose shop] (restarts when Docker restarts)"* ]]
   [[ "$output" == *"  7  1.4 GB  -           build cache (incl. build-mount caches)"* ]]
@@ -476,7 +476,7 @@ image	rm	--	${UM_DK_ID[5]}" ]
   sed -i 's|demo/base:1,demo/base:latest|demo/base:latest|' "$TEST_TMP/dk/images.tsv"
   printf '%s\t5MB\t2026-11-10 10:00:00 +0000 UTC\tdemo/base:1\n' "$new" >> "$TEST_TMP/dk/images.tsv"
   run um_docker_pick_and_remove
-  [[ "$output" == *"warning: Docker: demo/base:1 now points to another image; not removed"* ]]
+  [[ "$output" == *"warning: Docker: demo/base:1, demo/base:latest not removed: demo/base:1 now points to another image"* ]]
   assert_readonly_calls
   state_has images.tsv "${UM_DK_ID[5]}" && state_has images.tsv "$new"
 }
@@ -488,7 +488,7 @@ image	rm	--	${UM_DK_ID[5]}" ]
   printf '#!/bin/bash\nd="$(dirname "$0")"\nsed -i "s|demo/base:1,demo/base:latest|demo/base:latest|" "$d/images.tsv"\nprintf "%%s\\t5MB\\t2026-11-10 10:00:00 +0000 UTC\\tdemo/base:1\\n" %s >> "$d/images.tsv"\n' "$new" > "$TEST_TMP/dk/hook-ntags"
   chmod 755 "$TEST_TMP/dk/hook-ntags"
   run um_docker_pick_and_remove
-  [[ "$output" == *"demo/base:1 now points to another image; not removed"* ]]
+  [[ "$output" == *"not removed: demo/base:1 now points to another image"* ]]
   assert_readonly_calls
   state_has images.tsv "$new"
 }
@@ -522,7 +522,7 @@ image	rm	--	${UM_DK_ID[5]}" ]
   sed -i "/^${UM_DK_ID[1]}/d" "$TEST_TMP/dk/containers.tsv"
   run um_docker_pick_and_remove
   [[ "$output" == *"warning: Docker: old-web is gone; skipped"* ]]
-  [[ "$output" == *"warning: Docker: demo/db:2 kept; its container was not removed"* ]]
+  [[ "$output" == *"warning: Docker: demo/db:2 kept: container old-web was not removed"* ]]
   [ "$(removal_calls)" = "container	rm	--	${UM_DK_ID[2]}" ]
 }
 
@@ -530,7 +530,7 @@ image	rm	--	${UM_DK_ID[5]}" ]
   fake_docker; collect; answers=("1 2 4" y); touch "$TEST_TMP/dk/fail-container-rm"
   run um_docker_pick_and_remove
   [[ "$output" == *"warning: Docker: could not remove old-web: Error response from daemon: injected failure"* ]]
-  [[ "$output" == *"demo/db:2 kept; its container was not removed"* ]]
+  [[ "$output" == *"demo/db:2 kept: containers old-web, old-db were not removed"* ]]
   [ "$(removal_calls | grep -c $'^image')" -eq 0 ]
 }
 
@@ -539,7 +539,7 @@ image	rm	--	${UM_DK_ID[5]}" ]
   run ! grep -q $'^builder' "$TEST_TMP/dk/calls"
   fake_docker; collect; answers=(7 y); run um_docker_pick_and_remove
   [ "$(removal_calls)" = "builder	prune	--all	-f" ]
-  [[ "$output" == *"removed build cache (incl. build-mount caches) (1.4 GB)"* ]]
+  [[ "$output" == *"removed build cache (1.4 GB)"* ]]
 }
 
 @test "docker remove: total counts only successful removals" {
@@ -574,7 +574,7 @@ image	rm	--	${UM_DK_ID[5]}" ]
   um_have_tty() { return 1; }; um_docker_phase > "$TEST_TMP/out"
   grep -q 'Docker: nothing removed without a terminal' "$TEST_TMP/out"
   run um_result_print 0
-  [[ "$output" == *"Recommended: free Docker space (2.1 GB): ubuntu-maintain --apply --mode monthly"* ]]
+  [[ "$output" == *"Recommended: free Docker space (at least 2.1 GB): ubuntu-maintain --apply --mode monthly"* ]]
   assert_readonly_calls
 }
 
@@ -688,4 +688,43 @@ image	rm	--	${UM_DK_ID[5]}" ]
   [ "$(um_docker_snap_bin)" = "$TEST_TMP/snap" ]
   um_docker_is_root() { return 0; }
   [ "$(um_docker_snap_bin)" = /snap/bin/docker ]
+}
+
+@test "docker pick: n, no, none or q at the list mean none" {
+  local a
+  for a in n No none Q; do
+    fake_docker; collect; answers=("$a")
+    run um_docker_pick_and_remove
+    [[ "$output" == *"Nothing removed."* ]]
+    [[ "$output" != *"not understood"* ]]
+    assert_readonly_calls
+  done
+}
+
+@test "docker pick: digits from other scripts are not understood, without a shell error" {
+  locale -a | grep -qix 'en_US.utf-\?8' || skip 'en_US.UTF-8 not installed'
+  LC_ALL=en_US.UTF-8 run um_docker_parse_pick $'\xd9\xa3 \xc2\xb2' 9
+  [ "$status" -eq 1 ]
+  [ "$output" = $'\xd9\xa3' ]
+}
+
+@test "docker pick: an image is skipped with every container it still needs" {
+  fake_docker; collect; answers=(4 y)
+  run um_docker_pick_and_remove
+  [[ "$output" == *"skipped 4: containers 1,2 were not picked"* ]]
+  assert_readonly_calls
+}
+
+@test "docker remove: says it starts, and when nothing could be removed" {
+  fake_docker; collect; answers=(1 y); touch "$TEST_TMP/dk/fail-container-rm"
+  run um_docker_pick_and_remove
+  [[ "$output" == *"Removing 1 item(s)..."*"Docker: removed 0 of 1 item(s); nothing freed"* ]]
+}
+
+@test "docker phase: no answer at the picker keeps the Recommended line" {
+  fake_docker; export UM_MODE=monthly UM_APPLY=1; um_probe_docker > /dev/null
+  um_have_tty() { return 0; }; answers=(__eof__)
+  um_docker_phase > /dev/null
+  run um_result_print 0
+  [[ "$output" == *"Recommended: free Docker space (at least 2.1 GB)"* ]]
 }

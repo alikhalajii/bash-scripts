@@ -123,8 +123,8 @@ Notes (nothing is listed or removed):
 
 Warnings after you answered `y` (that item was not removed; run again to see the current list):
 
-- **`... changed since the list; not removed`**, **`... now points to another image; not removed`**, **`... is gone; skipped`:** the container or image changed between the list and your answer, for example a container was started or a tag was pulled again.
-- **`... kept; its container was not removed`:** the image needs a stopped container that was not removed, so Docker would refuse it.
+- **`... changed since the list; not removed`**, **`... not removed: ... now points to another image`**, **`... is gone; skipped`:** the container or image changed between the list and your answer, for example a container was started or a tag was pulled again.
+- **`... kept: container ... was not removed`:** the image needs that stopped container, which was not removed, so Docker would refuse it.
 - **`could not remove ...: <Docker's message>`:** Docker refused, usually because a container uses the image.
 - **`warning: Docker: N record(s) could not be read; those items are not listed`:** Docker printed something unexpected for those items. They are left out, and so is any image such a container uses.
 

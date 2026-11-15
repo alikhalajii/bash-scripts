@@ -127,9 +127,9 @@ With `fwupdmgr` (fwupd) installed, every run reports available firmware updates 
 With Docker installed and running, `--mode monthly` adds a Docker section: stopped containers, images that no running container uses, and the build cache, each numbered with the space it frees and a date. Nothing is removed without you:
 
 - The dry run (`ubuntu-maintain --mode monthly`) only lists. If your user cannot reach Docker, it says `run with --apply to list it`.
-- `ubuntu-maintain --apply --mode monthly` on a terminal asks `Remove which? Numbers like 1 3 or 2-4, Enter = none:`, repeats your picks, and removes them only after `y`. Enter, `n`, or no answer within 5 minutes removes nothing.
+- `ubuntu-maintain --apply --mode monthly` on a terminal asks `Remove which? Numbers like 1 3 or 2-4, Enter = none:`, repeats your picks, and removes them only after `y`. Enter or `n` at either question, or no answer within 5 minutes, removes nothing.
 - From a timer, cron, or any run without a terminal, it never removes anything; the Result block recommends a terminal run.
-- An image only stopped containers use is marked `(used by stopped 1,2: pick both)`: pick it together with those containers, or it is skipped.
+- An image only stopped containers use is marked `(used by stopped 1: pick both)` or `(used by stopped 1,2: pick it with them)`: pick it together with those containers, or it is skipped.
 - Never removed here: volumes (listed with their size), running or paused containers and their images, and anything that changed between the list and your `y`.
 - Images show their build date (`built`): Docker does not record when an image was last used. Dates before 2000 (reproducible builds) show as `unknown`.
 - Sizes are minimums (`at least`): images share layers, so removing several can free more. With Docker's containerd image store they are estimates (`about`).
