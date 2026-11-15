@@ -1370,6 +1370,13 @@ fw_apply() {
   [[ "$output" == *"only after you answer y on a terminal"* ]]
 }
 
+@test "help mentions Docker items in the monthly cleanup and the answer rule" {
+  um_cli --help
+  [[ "$output" == *"Docker items you pick"* ]]
+  [[ "$output" == *"Firmware updates and Docker removals"* ]]
+  [[ "$output" == *"only after you answer y on a terminal"* ]]
+}
+
 @test "help keeps the usual layout and fits 80 columns" {
   um_cli --help
   [ "$(awk 'length > 80' <<<"$output" | wc -l)" -eq 0 ]

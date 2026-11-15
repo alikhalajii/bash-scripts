@@ -10,4 +10,6 @@ Output: plain text, no color. Start each phase with `um_section "<Name>"`; prefi
 
 Firmware: query `fwupdmgr` only through `um_fw_cmd` (C locale, stdin `/dev/null`, `--json`, time limit); never call `check-reboot-needed` (it asks to restart). Install only via `um_firmware_phase`. Never remove packages from `?obsolete`.
 
+Docker: call docker only through `um_docker_cmd` (isolated env, fixed socket). Never `system prune`, `image prune`, `volume rm`, `-f`/`--force`/`-v` on rm; the only prune is `builder prune --all -f`. Validate every parsed field and pass displayed text through `um_docker_safe_text`. Remove only after the picker's final `y` and a re-check of each item.
+
 User-facing issues: `docs/TROUBLESHOOTING.md`.

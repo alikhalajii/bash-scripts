@@ -149,15 +149,16 @@ ubuntu-maintain ${UM_VERSION} — safe, probe-driven Ubuntu/Debian maintenance
 
 Usage: ubuntu-maintain [OPTIONS]
 
-Without --apply nothing is changed. Firmware updates (fwupd) are reported on
-every run and installed only after you answer y on a terminal, never from cron.
+Without --apply nothing is changed. Firmware updates and Docker removals are
+listed first and done only after you answer y on a terminal, never from cron.
 
 Options:
   --apply                   Make changes (default: dry run)
   --mode daily|monthly      daily (default): updates only; monthly: also clean
                             up (autoremove, apt cache, leftover configs, old
                             snap revisions, unused flatpak runtimes, journal
-                            over 500M), previewed by a dry run
+                            over 500M, Docker items you pick), previewed by a
+                            dry run
   --aggressive              Allow apt dist-upgrade and large autoremoves
                             (over 25 packages); both may remove packages
   --manifest-only           Print the manifest and exit
