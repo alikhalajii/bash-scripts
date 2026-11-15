@@ -70,7 +70,7 @@ um_manifest_print() {
 um_manifest_planned_phases() {
   if [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]]; then
     um_log "  - apt (${UM_CAP[apt_tier_selected]})"
-    if [[ "${UM_MODE}" == "monthly" ]]; then um_log "  - apt autoremove --purge, autoclean, purge residual configs (monthly)"; fi
+    if [[ "${UM_MODE}" == "monthly" ]]; then um_log "  - apt autoremove --purge (limit ${UM_AUTOREMOVE_LIMIT:-25} without --aggressive), clean, purge residual configs (monthly)"; fi
   fi
   if [[ "${UM_CAP[snap_has_packages]:-0}" -eq 1 ]]; then
     um_log "  - snap refresh"

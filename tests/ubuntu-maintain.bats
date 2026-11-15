@@ -1,5 +1,8 @@
 #!/usr/bin/env bats
 
+# `run !` (negative assertions) needs bats >= 1.5; the pre-commit hook pins 1.13.
+bats_require_minimum_version 1.5.0
+
 setup() {
   export ROOT="${BATS_TEST_DIRNAME}/.."
   export UM_LIB="${ROOT}/lib/ubuntu-maintain"
@@ -932,4 +935,122 @@ echo "g++-14/now 14.2.0-4 amd64 [installed,local]"'
   { UM_CAP[manifest_timestamp]="test"; UM_CAP[apt_available]=1; UM_CAP[apt_obsolete_count]=3; }
   run um_manifest_print
   [[ "$output" == *"  obsolete_packages: 3"* ]]
+}
+
+# APT cleanup fakes. apt-get prints ${TEST_TMP}/autoremove.sim for "-s autoremove" and logs
+# every call; dpkg-query knows two package sizes; du reports a 454 MB download cache.
+fake_apt_cleanup() {
+  source "${UM_LIB}/apt_module.sh"
+  um_sudo() { "$@"; }
+  printf 'Inst foo [1.0]\nPurg libstdc++6-old [1.0]\nRemv g++-14 [14.2]\n' > "${TEST_TMP}/autoremove.sim"
+  fake_bin apt-get 'echo "$*" >> "${TEST_TMP}/apt-get.argv"; printf "%s" "${LC_ALL:-}" > "${TEST_TMP}/apt-get.lc_all"
+[[ "$*" == *"-s autoremove --purge"* ]] && cat "${TEST_TMP}/autoremove.sim"
+exit 0'
+  fake_bin dpkg-query 'for a in "$@"; do case "$a" in libstdc++6-old) echo 102400 ;; g++-14) echo 51200 ;; esac; done'
+  fake_bin du 'printf "464896\t/var/cache/apt/archives\n"'
+  fake_bin dpkg 'echo "$*" >> "${TEST_TMP}/dpkg.argv"
+[[ "$1" == "-l" ]] && printf "Desired=Unknown\nrc  oldconf  1.0  amd64  gone\nii  keep  1.0  amd64  kept\n"
+exit 0'
+  # shellcheck disable=SC2154
+  { UM_CAP[apt_available]=1; UM_CAP[apt_simulated_removals]=0; UM_CAP[apt_obsolete_count]=0; }
+}
+
+# Apply-path stubs: no locks, no network, no real upgrade.
+stub_apt_apply() {
+  export UM_APPLY=1 UM_MODE=monthly
+  um_apt_wait_locks() { return 0; }
+  um_apt_update() { return 0; }
+  um_manifest_apt_simulate_summary() { return 0; }
+  um_apt_apply_upgrade() { return 0; }
+}
+
+fake_autoremove_count() {
+  local i; : > "${TEST_TMP}/autoremove.sim"
+  for ((i = 1; i <= $1; i++)); do echo "Purg pkg${i} [1.0]" >> "${TEST_TMP}/autoremove.sim"; done
+}
+
+@test "list head truncates with a count of the rest" {
+  source "${UM_LIB}/apt_module.sh"
+  run um_list_head 2 a b c d
+  [ "$output" = "a b … (+2 more)" ]
+  run um_list_head 5 a b
+  [ "$output" = "a b" ]
+}
+
+@test "autoremove list parses Purg and Remv lines, including names with + and ." {
+  fake_apt_cleanup
+  run um_apt_autoremove_list
+  [ "$output" = $'libstdc++6-old\ng++-14' ]
+  [ "$(cat "${TEST_TMP}/apt-get.lc_all")" = "C" ]
+}
+
+@test "package sizes sum to MB, unknown names count as 0" {
+  fake_apt_cleanup
+  run um_pkgs_size_mb libstdc++6-old g++-14 not-installed
+  [ "$output" = "150" ]
+  run um_pkgs_size_mb
+  [ "$output" = "0" ]
+}
+
+@test "monthly dry run shows the cleanup preview" {
+  fake_apt_cleanup
+  export UM_MODE=monthly
+  UM_CAP[apt_obsolete_count]=12
+  UM_CAP[apt_obsolete_list]="o1 o2 o3 o4 o5 o6 o7 o8 o9 o10 o11 o12"
+  run um_apt_phase
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Cleanup preview (monthly):"* ]]
+  [[ "$output" == *"autoremove (before upgrades): 2 package(s), 150 MB: libstdc++6-old g++-14"* ]]
+  [[ "$output" == *"residual configs: 1 package(s): oldconf"* ]]
+  [[ "$output" == *"download cache: 454 MB (apt-get clean)"* ]]
+  [[ "$output" == *"not in any repository (review, never removed): 12 package(s): o1 o2 o3 o4 o5 o6 o7 o8 o9 o10 … (+2 more)"* ]]
+  run ! grep -q -- '-y' "${TEST_TMP}/apt-get.argv"
+  run ! grep -q -- '--purge' "${TEST_TMP}/dpkg.argv"
+}
+
+@test "daily dry run shows no cleanup preview" {
+  fake_apt_cleanup
+  run um_apt_phase
+  [[ "$output" != *"Cleanup preview"* ]]
+}
+
+@test "autoremove runs at the limit (25 packages)" {
+  fake_apt_cleanup; stub_apt_apply; fake_autoremove_count 25
+  run um_apt_phase
+  [ "$status" -eq 0 ]
+  grep -qx -- 'autoremove --purge -y' "${TEST_TMP}/apt-get.argv"
+}
+
+@test "autoremove above the limit is skipped with a warning unless --aggressive" {
+  fake_apt_cleanup; stub_apt_apply; fake_autoremove_count 26
+  run um_apt_phase
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"warning: autoremove would remove 26 packages (limit 25)"* ]]
+  run ! grep -qx -- 'autoremove --purge -y' "${TEST_TMP}/apt-get.argv"
+  export UM_AGGRESSIVE=1
+  run um_apt_phase
+  grep -qx -- 'autoremove --purge -y' "${TEST_TMP}/apt-get.argv"
+}
+
+@test "autoremove guard warning reaches the Result block" {
+  fake_apt_cleanup; stub_apt_apply; fake_autoremove_count 26
+  um_apt_phase > /dev/null
+  [[ "${UM_ISSUES[*]}" == *"autoremove would remove 26 packages"* ]]
+}
+
+@test "monthly apply uses apt-get clean, not autoclean, and purges residual configs" {
+  fake_apt_cleanup; stub_apt_apply
+  run um_apt_phase
+  [ "$status" -eq 0 ]
+  grep -qx -- 'clean' "${TEST_TMP}/apt-get.argv"
+  run ! grep -q -- 'autoclean' "${TEST_TMP}/apt-get.argv"
+  grep -qx -- '--purge -- oldconf' "${TEST_TMP}/dpkg.argv"
+}
+
+@test "obsolete packages are never passed to a removal command" {
+  fake_apt_cleanup; stub_apt_apply
+  UM_CAP[apt_obsolete_count]=1; UM_CAP[apt_obsolete_list]="anydesk"
+  run um_apt_phase
+  run ! grep -q anydesk "${TEST_TMP}/apt-get.argv"
+  run ! grep -q anydesk "${TEST_TMP}/dpkg.argv"
 }
