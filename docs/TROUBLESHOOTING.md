@@ -94,6 +94,26 @@ chmod -R go-w ~/.local/share/ubuntu-maintain    # or wherever you cloned it
 
 A dry run prints the same problem as a warning.
 
+## Autoremove skipped (limit 25)
+
+`warning: autoremove would remove N packages (limit 25)` means a monthly run found more removable packages than routine maintenance produces, usually after a release upgrade or with newer apt (3.x), whose solver marks more packages as unneeded. Nothing was removed. Read the `autoremove:` list above the warning; if it is what you expect, run again with `--aggressive`:
+
+```bash
+ubuntu-maintain --apply --mode monthly --aggressive
+```
+
+To keep a package, mark it as manually installed first: `sudo apt-mark manual <package>`.
+
+## Firmware updates are not installed
+
+- **Run from a timer or cron:** installing firmware needs a `y` on a terminal, so unattended runs only report it. Run `sudo fwupdmgr update` yourself, or run the tool by hand.
+- **`note: this fwupd version cannot install without asking its own questions`:** older fwupd (18.04/20.04) lacks the options that turn off its other prompts. Use `sudo fwupdmgr update`.
+- **Firmware phase failed (exit 14):** run `sudo fwupdmgr update` to see fwupd's error. Common causes are battery below the required level or no AC power.
+
+## Services restarted after updates (Ubuntu 24.04+)
+
+Since Ubuntu 24.04, `needrestart` restarts affected services automatically when apt runs it, also outside `--restart-services`. To keep a service from being restarted, add a regular expression matching it to `$nrconf{override_rc}` in a file under `/etc/needrestart/conf.d/`.
+
 ## topgrade phase failed (exit 13)
 
 - **"requires a non-root invoking user":** topgrade runs as the user who invoked sudo. Run `ubuntu-maintain --apply --with-topgrade` from your normal account, not from a root shell or root's crontab.

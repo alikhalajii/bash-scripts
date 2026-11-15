@@ -14,6 +14,8 @@ Optional. Each is detected at runtime, and its phase is skipped when it is missi
 - `snap`, `flatpak`: updated when present.
 - `needrestart`: reports services that need a restart; used by `--restart-services`.
 - `topgrade`: used by `--with-topgrade`.
+- `fwupdmgr` (fwupd): firmware updates are reported; installed only after a `y` on a terminal.
+- `journalctl`: monthly runs trim archived journal files to 500 MB.
 - `fuser` or `lsof`: lock polling on 18.04, whose apt cannot wait for locks itself.
 
 ## Development

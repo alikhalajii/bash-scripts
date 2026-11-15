@@ -37,10 +37,12 @@ Phases run in this order; each one is skipped if its tool is missing or has noth
 2. **apt:** `apt-get update`, re-simulates the upgrade against fresh package lists, then `apt-get upgrade --with-new-pkgs`.
 3. **snap:** `snap refresh`.
 4. **flatpak:** `flatpak update` for the system-wide installation (per-user installs are left alone).
-5. **topgrade** (only with `--with-topgrade`): pip, cargo, npm and other user-level tools.
-6. **Stability gate** (only with `--apply`): a reboot needed for a new kernel, firmware, microcode or dbus (or a reboot flag that names no package), failed systemd units, interrupted dpkg runs, and a `needrestart` report when installed. Library updates such as `libc6` only add a restart recommendation; they do not fail the run.
-7. **Update summary** (only with `--apply`).
-8. **Result** (every dry run and update run; not for `--help` or usage errors): one-line verdict, a `Next:` or `Recommended:` hint when there is something to do, the warnings logged during the run, the exit code, and the log path.
+5. **Journal** (monthly only): trims archived systemd journal files to 500 MB.
+6. **topgrade** (only with `--with-topgrade`): pip, cargo, npm and other user-level tools.
+7. **Firmware** (when `fwupdmgr` is installed): reports available firmware updates; see [Firmware](#firmware).
+8. **Stability gate** (only with `--apply`): a reboot needed for a new kernel, firmware, microcode or dbus (or a reboot flag that names no package), failed systemd units, interrupted dpkg runs, and a `needrestart` report when installed. Library updates such as `libc6` only add a restart recommendation; they do not fail the run.
+9. **Update summary** (only with `--apply`).
+10. **Result** (every dry run and update run; not for `--help` or usage errors): one-line verdict, a `Next:` or `Recommended:` hint when there is something to do, the warnings logged during the run, the exit code, and the log path.
 
 ## Common tasks
 
@@ -52,22 +54,25 @@ ubuntu-maintain --apply --with-topgrade    # also update user-level tools
 ubuntu-maintain --apply --ignore-stability # do not exit 2 for known, unrelated failed units
 ```
 
-**Monthly mode removes things.** On top of upgrades it runs `apt-get autoremove --purge` and `autoclean`, purges leftover config files of already-removed packages, removes disabled snap revisions and the snap download cache, and uninstalls unused flatpak runtimes. Run it without `--apply` first to review the plan.
+**Monthly mode removes things.** On top of upgrades it runs `apt-get autoremove --purge` and `apt-get clean` (the whole download cache), purges leftover config files of already-removed packages, removes disabled snap revisions and the snap download cache, uninstalls unused flatpak runtimes, and trims archived journal files to 500 MB. Run it without `--apply` first: the dry run prints a **cleanup preview** with the packages autoremove would remove and their size, the leftover configs, the cache size, the journal size, and the snap revisions to remove.
+
+- **Large autoremoves need `--aggressive`.** If autoremove would remove more than 25 packages, the step is skipped with a warning. Newer apt (3.x, the default on Ubuntu 26.04) removes more than older releases; review the list, then re-run with `--aggressive` to allow it.
+- **Packages no repository provides are only reported.** The manifest counts them (`obsolete_packages`), and the monthly preview lists them. These are often deliberate installs (a downloaded `.deb`, software from a removed PPA), so the tool never removes them. `apt list '?obsolete'` shows the full list.
 
 ## Options
 
-| Option                     | Effect                                                                                                                      |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `--apply`                  | Make changes. Without it, everything is a dry run.                                                                          |
-| `--mode daily\|monthly`    | `daily` (default) upgrades only; `monthly` adds the cleanup above.                                                          |
-| `--aggressive`             | Use `apt-get dist-upgrade`, which may remove packages.                                                                      |
-| `--manifest-only`          | Print the manifest and exit.                                                                                                |
-| `--with-topgrade`          | Run [topgrade](https://github.com/topgrade-rs/topgrade) after the system package managers.                                  |
-| `--continue-on-pm-failure` | Keep going after a snap, flatpak, or topgrade failure. The exit code still reports it. An apt failure always stops the run. |
-| `--ignore-stability`       | Do not exit 2 for failed units, a pending reboot, or dpkg errors.                                                           |
-| `--restart-services`       | Let needrestart restart affected services automatically. Use with care.                                                     |
-| `--log-file PATH`          | Write the log to `PATH` instead of the default (see [Logs](#logs)).                                                         |
-| `-h`, `--help`             | Show help.                                                                                                                  |
+| Option                     | Effect                                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `--apply`                  | Make changes. Without it, everything is a dry run.                                                                                    |
+| `--mode daily\|monthly`    | `daily` (default) upgrades only; `monthly` adds the cleanup above.                                                                    |
+| `--aggressive`             | Use `apt-get dist-upgrade`, which may remove packages.                                                                                |
+| `--manifest-only`          | Print the manifest and exit.                                                                                                          |
+| `--with-topgrade`          | Run [topgrade](https://github.com/topgrade-rs/topgrade) after the system package managers.                                            |
+| `--continue-on-pm-failure` | Keep going after a snap, flatpak, topgrade, or firmware failure. The exit code still reports it. An apt failure always stops the run. |
+| `--ignore-stability`       | Do not exit 2 for failed units, a pending reboot, or dpkg errors.                                                                     |
+| `--restart-services`       | Let needrestart restart affected services automatically. Use with care.                                                               |
+| `--log-file PATH`          | Write the log to `PATH` instead of the default (see [Logs](#logs)).                                                                   |
+| `-h`, `--help`             | Show help.                                                                                                                            |
 
 Setting `UPDATE_APPLY=1` in the environment is the same as `--apply`.
 
@@ -81,6 +86,7 @@ Setting `UPDATE_APPLY=1` in the environment is the same as `--apply`.
 | 11   | snap phase failed                                                                                                                     |
 | 12   | flatpak phase failed                                                                                                                  |
 | 13   | topgrade phase failed                                                                                                                 |
+| 14   | firmware phase failed (`fwupdmgr update` returned an error)                                                                           |
 | 64   | Usage error: unknown option, missing value, sudo missing, sudo authentication failed, or the tool's files are writable by other users |
 
 Exit 2 is deliberate, so scheduled runs do not report an unhealthy system as green. Units that are expected to fail in the current environment (e.g. `tpm-udev` on machines without a TPM, including WSL) are listed separately and do not cause exit 2. See [Troubleshooting](docs/TROUBLESHOOTING.md#stability-gate-exit-2).
@@ -104,15 +110,23 @@ ubuntu-maintain --apply --with-topgrade
 
 topgrade runs as **your** user, not as root, with its system, snap, and flatpak steps disabled so nothing runs twice. It is looked up in your login shell's PATH, so `~/.cargo/bin` works. Run the command from your normal account, not from a root shell. If topgrade is not found, the run prints a warning and skips it.
 
+## Firmware
+
+With `fwupdmgr` (fwupd) installed, every run reports available firmware updates in the manifest and in a Firmware section. Nothing is installed without you:
+
+- With `--apply` on a terminal, the tool lists the devices and new versions and asks `Install N firmware update(s) now? [y/N]`. No answer within 5 minutes counts as no.
+- From a timer, cron, or any run without a terminal, it never installs; the Result block recommends `sudo fwupdmgr update`.
+- After an install, the Result block recommends a restart: many firmware updates finish on the next boot. fwupd's own battery and power checks stay on.
+
 ## Logs
 
 By default the log is `/tmp/ubuntu-maintain.<uid>.log`. After `--apply` that is `/tmp/ubuntu-maintain.0.log`, because the run happens as root. Logs are created with mode `600`. If the default path is a symlink or belongs to another user, the tool logs to a fresh temporary file instead and prints its path.
 
 ## Supported systems
 
-Ubuntu 18.04 and later, and Debian. CI tests Ubuntu 20.04, 22.04, 24.04, and 26.04. 18.04 and 20.04 are past standard support and are best effort; the manifest shows a warning there.
+Ubuntu 18.04 and later, and Debian. CI tests Ubuntu 20.04, 22.04, 24.04, and 26.04, and Debian 12 and 13: a dry run, then a real `--apply --mode monthly` in a throwaway container for each. 18.04 and 20.04 are past standard support and are best effort; the manifest shows a warning there.
 
-Requires bash 4.4+ and `sudo` (for `--apply`). snap, flatpak, needrestart, and topgrade are optional. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
+Requires bash 4.4+ and `sudo` (for `--apply`). snap, flatpak, needrestart, fwupd, and topgrade are optional. See [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
 ## Development
 
@@ -125,14 +139,14 @@ pre-commit run --all-files     # run the commit checks on the whole repo
 pre-commit run --all-files --hook-stage pre-push   # run the test suite
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same two `pre-commit` commands, plus a dry run in Ubuntu 20.04–26.04 containers. Details: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md#development).
+CI (`.github/workflows/ci.yml`) runs the same two `pre-commit` commands, plus a dry run and a real monthly `--apply` in Ubuntu 20.04–26.04 and Debian 12–13 containers. Details: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md#development).
 
 ### Repository layout
 
 ```text
 bin/ubuntu-maintain     CLI entry point
-lib/ubuntu-maintain/    modules (probe, manifest, apt, snap, flatpak, topgrade, stability, summary)
-tests/                  bats tests
+lib/ubuntu-maintain/    modules (probe, manifest, apt, snap, flatpak, journal, topgrade, firmware, stability, summary)
+tests/                  bats tests; tests/fixtures/ holds sample tool output
 docs/                   requirements, troubleshooting, operational notes (docs/solutions/)
 update-script.sh        legacy wrapper, same as `ubuntu-maintain --apply`
 .pre-commit-config.yaml pinned quality checks (local hooks and CI)

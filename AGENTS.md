@@ -8,4 +8,6 @@ Development: `pre-commit run --all-files` (shellcheck, prettier, hygiene) and `p
 
 Output: plain text, no color. Start each phase with `um_section "<Name>"`; prefix problems with `warning:` or `error:` in a direct `um_log` call (not inside `$(...)`) so they are repeated in the final Result block. Manifest keys are grepped by CI and scripts: do not rename them.
 
+Firmware: query `fwupdmgr` only through `um_fw_cmd` (C locale, stdin `/dev/null`, `--json`, time limit); never call `check-reboot-needed` (it asks to restart). Install only via `um_firmware_phase`. Never remove packages from `?obsolete`.
+
 User-facing issues: `docs/TROUBLESHOOTING.md`.
