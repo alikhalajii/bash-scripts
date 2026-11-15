@@ -257,3 +257,56 @@ assert_readonly_calls() {
   assert_readonly_calls
   [ "$(grep -c '^system' "$TEST_TMP/dk/calls")" -eq 2 ]
 }
+
+@test "docker render: every line fits 80 bytes" {
+  fake_docker; collect; run um_docker_render
+  [ "$(LC_ALL=C awk 'length > 80' <<<"$output" | wc -l)" -eq 0 ]
+  UM_DK_NAME[3]="demo/$(printf 'x%.0s' {1..90}):tail42"; run um_docker_render
+  [ "$(LC_ALL=C awk 'length > 80' <<<"$output" | wc -l)" -eq 0 ]
+  [[ "$output" == *"...tail42"* ]]
+}
+
+@test "docker render: header, groups, notes, kept line, volumes" {
+  fake_docker; collect; run um_docker_render
+  [[ "${lines[0]}" == "Docker: 7 item(s) can be removed, at least 2.1 GB." ]]
+  [[ "$output" == *"Files written inside a container are deleted with it."* ]]
+  [[ "$output" == *"  #   frees  last stop   container"* ]]
+  [[ "$output" == *"  1     0 B  never run   old-web, image demo/db:2"* ]]
+  [[ "$output" == *'Docker does not record when an image was last used; "built" = build date.'* ]]
+  [[ "$output" == *"  #   frees  built       image"* ]]
+  [[ "$output" == *"  4  210 MB  2025-09-01  demo/db:2 (used by stopped 1,2: pick both)"* ]]
+  [[ "$output" == *"  5  100 MB  unknown     demo/base:1, demo/base:latest"* ]]
+  [[ "$output" == *"old-db [compose shop] (restarts when Docker restarts)"* ]]
+  [[ "$output" == *"  7  1.4 GB  -           build cache (incl. build-mount caches)"* ]]
+  [[ "$output" == *"Kept: 1 image (420 MB) used by running container app-1"* ]]
+  [[ "$output" == *"Volumes (1.2 GB; kept, never removed here):"* ]]
+  [[ "$output" == *"  823 MB  not used  data-vol"* ]]
+  [[ "$output" == *"   12 kB  in use    app-vol"* ]]
+}
+
+@test "docker render: more than five volumes end with a count" {
+  fake_docker
+  printf '1MB\t0\t"v%s"\n' 1 2 3 4 >> "$TEST_TMP/dk/volumes.tsv"
+  collect; run um_docker_render
+  [[ "$output" == *"  ... (+2 more)"* ]]
+}
+
+@test "docker render: nothing removable is one line" {
+  fake_docker kept-only; collect; run um_docker_render
+  [ "${lines[0]}" = "Docker: nothing to remove" ]
+  [[ "$output" != *"  #   frees"* ]]
+  [[ "$output" == *"Kept: 1 image (420 MB) used by running container app-1"* ]]
+  [[ "$output" == *"Volumes ("* ]]
+}
+
+@test "docker render: unknown size shows ? and is not counted" {
+  fake_docker containerd; collect; run um_docker_render
+  [ "${lines[0]}" = "Docker: 7 item(s) can be removed, about 1.8 GB." ]
+  [[ "$output" == *"  6       ?  2025-04-08  demo/big:3"* ]]
+}
+
+@test "docker render: no build cache line when the cache is empty" {
+  fake_docker no-cache; collect; run um_docker_render
+  [ "${lines[0]}" = "Docker: 6 item(s) can be removed, at least 672 MB." ]
+  [[ "$output" != *"build cache"* ]]
+}

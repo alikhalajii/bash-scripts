@@ -3,7 +3,8 @@
 #             the space each frees; remove only what the user picks and confirms on a terminal.
 # Provides: um_docker_cmd (the only way to call docker), um_docker_bin, um_docker_sock,
 #           um_docker_size_bytes, um_docker_fmt_size, um_docker_safe_text, um_docker_json_str,
-#           um_docker_parse_pick, um_probe_docker, um_docker_collect (fills UM_DK_*)
+#           um_docker_parse_pick, um_probe_docker, um_docker_collect (fills UM_DK_*),
+#           um_docker_render
 # Example:  um_docker_cmd version --format '{{.Server.Version}}'
 # Sourced by: common.sh → um_source_libs
 
@@ -489,4 +490,63 @@ um_docker_collect() {
   grep -q 'io\.containerd\.snapshotter' "$d/info" && UM_DK_ABOUT=1
   rm -rf -- "$d"
   return 0
+}
+
+# um_docker_item_line I [full]: one numbered line "  4  210 MB  2025-09-01  demo/db:2 ...".
+# Fits 80 columns: the image a container came from is dropped first, then only the name
+# is shortened in the middle; notes stay whole. "full" prints everything (confirmation).
+um_docker_item_line() {
+  local i="$1" max=55 size="?" text name="${UM_DK_NAME[$1]}"
+  local note="${UM_DK_NOTE[$1]:+ ${UM_DK_NOTE[$1]}}" from="${UM_DK_FROM[$1]:+, image ${UM_DK_FROM[$1]}}"
+  [[ -z "${UM_DK_BYTES[i]}" ]] || size="$(um_docker_fmt_size "${UM_DK_BYTES[i]}")"
+  text="${name}${note}${from}"
+  if [[ "${2:-}" != full && ${#text} -gt $max ]]; then
+    text="${name}${note}"
+    if (( ${#text} > max )); then
+      if (( max - ${#note} >= 10 )); then
+        text="$(um_docker_safe_text "$name" "$((max - ${#note}))")${note}"
+      else
+        text="$(um_docker_safe_text "$text" "$max")"
+      fi
+    fi
+  fi
+  printf '%3s  %6s  %-10s  %s\n' "$i" "$size" "${UM_DK_DATE[i]}" "$text"
+}
+
+# The size headline: "at least 2.1 GB", or "about 2.1 GB" when sizes are approximate.
+um_docker_total_text() {
+  local how="at least"
+  [[ "${UM_DK_ABOUT:-0}" -eq 1 ]] && how="about"
+  printf '%s %s\n' "$how" "$(um_docker_fmt_size "${UM_DK_TOTAL:-0}")"
+}
+
+# Print the Docker list from UM_DK_* (um_docker_collect): headline, containers, images,
+# build cache, the Kept line and up to five volumes.
+um_docker_render() {
+  local i n="${#UM_DK_KIND[@]}" group=""
+  if [[ "$n" -eq 0 ]]; then
+    um_log "Docker: nothing to remove"
+  else
+    um_log "Docker: ${n} item(s) can be removed, $(um_docker_total_text)."
+  fi
+  for (( i = 1; i <= n; i++ )); do
+    if [[ "${UM_DK_KIND[i]}" != "$group" ]]; then
+      group="${UM_DK_KIND[i]}"
+      case "$group" in
+        container)
+          um_log "Files written inside a container are deleted with it."
+          um_log "$(printf '%3s  %6s  %-10s  %s' '#' frees 'last stop' container)" ;;
+        image)
+          um_log 'Docker does not record when an image was last used; "built" = build date.'
+          um_log "$(printf '%3s  %6s  %-10s  %s' '#' frees built image)" ;;
+      esac
+    fi
+    um_log "$(um_docker_item_line "$i")"
+  done
+  [[ -z "$UM_DK_KEPT" ]] || um_log "$UM_DK_KEPT"
+  if [[ ${#UM_DK_VOLUMES[@]} -gt 0 ]]; then
+    um_log "Volumes (${UM_DK_VOLTOTAL}; kept, never removed here):"
+    for (( i = 1; i <= ${#UM_DK_VOLUMES[@]} && i <= 5; i++ )); do um_log "${UM_DK_VOLUMES[i]}"; done
+    if [[ ${#UM_DK_VOLUMES[@]} -gt 5 ]]; then um_log "  ... (+$(( ${#UM_DK_VOLUMES[@]} - 5 )) more)"; fi
+  fi
 }
