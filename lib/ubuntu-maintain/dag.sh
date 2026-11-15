@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# dag.sh — Orchestrate probes → manifest → apt → snap → flatpak → journal → topgrade → stability.
+# dag.sh — Orchestrate probes → manifest → apt → snap → flatpak → journal → topgrade → firmware → stability.
 # Provides: um_run_dag
 # Sourced by: common.sh → um_source_libs
 
 um_run_dag() {
   local exit_code=0
-  local apt_rc=0 snap_rc=0 flatpak_rc=0 stab_rc=0 topgrade_rc=0
+  local apt_rc=0 snap_rc=0 flatpak_rc=0 stab_rc=0 topgrade_rc=0 firmware_rc=0
 
   um_run_probes
   um_manifest_print
@@ -83,6 +83,18 @@ um_run_dag() {
   if [[ "$topgrade_rc" -ne 0 ]]; then
     um_log "Topgrade phase failed (exit ${topgrade_rc})"
     if [[ "$exit_code" -eq 0 ]]; then exit_code="$topgrade_rc"; fi
+    if [[ "${UM_CONTINUE_ON_FAILURE}" -eq 0 ]]; then
+      if [[ "${UM_APPLY}" -eq 1 ]]; then
+        um_stability_gate || stab_rc=$?
+      fi
+      return $(( exit_code != 0 ? exit_code : stab_rc ))
+    fi
+  fi
+
+  um_firmware_phase || firmware_rc=$?
+  if [[ "$firmware_rc" -ne 0 ]]; then
+    um_log "Firmware phase failed (exit ${firmware_rc})"
+    if [[ "$exit_code" -eq 0 ]]; then exit_code="$firmware_rc"; fi
     if [[ "${UM_CONTINUE_ON_FAILURE}" -eq 0 ]]; then
       if [[ "${UM_APPLY}" -eq 1 ]]; then
         um_stability_gate || stab_rc=$?

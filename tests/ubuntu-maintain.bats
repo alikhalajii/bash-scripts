@@ -1145,10 +1145,14 @@ exit 0'
 # the fixture) and exits ${TEST_TMP}/fw.rc (default 0).
 fake_fwupd() {
   cp "${BATS_TEST_DIRNAME}/fixtures/fwupd-get-updates.json" "${TEST_TMP}/fw.out"
+  printf '  -y, --assume-yes\n  --no-unreported-check\n  --no-remote-check\n  --no-reboot-check\n  --no-security-fix\n' > "${TEST_TMP}/fw.help"
   fake_bin fwupdmgr 'echo "$*" >> "${TEST_TMP}/fw.argv"; printf "%s" "${LC_ALL:-}" > "${TEST_TMP}/fw.lc_all"
 readlink "/proc/$$/fd/0" > "${TEST_TMP}/fw.stdin"
 case "$1" in
   get-updates) cat "${TEST_TMP}/fw.out"; exit "$(cat "${TEST_TMP}/fw.rc" 2>/dev/null || echo 0)" ;;
+  --help) cat "${TEST_TMP}/fw.help" ;;
+  refresh) exit "$(cat "${TEST_TMP}/fw.refresh_rc" 2>/dev/null || echo 0)" ;;
+  update) exit "$(cat "${TEST_TMP}/fw.update_rc" 2>/dev/null || echo 0)" ;;
 esac
 exit 0'
 }
@@ -1205,4 +1209,145 @@ exit 0'
   run um_manifest_print
   [[ "$output" == *$'firmware:\n  available: 1\n  updates: 2'* ]]
   [[ "$output" == *"  - firmware (report; installing asks first)"* ]]
+}
+
+# Firmware phase under --apply with 2 pending updates; the terminal and the answer are stubbed.
+fw_apply() {
+  source "${UM_LIB}/firmware.sh"
+  fake_fwupd
+  export UM_APPLY=1
+  um_probe_firmware
+  rm -f "${TEST_TMP}/fw.argv"
+}
+
+@test "firmware: pending updates without a terminal are reported, never installed" {
+  fw_apply
+  um_have_tty() { return 1; }
+  um_fw_confirm() { echo ASKED; return 0; }
+  run um_firmware_phase
+  [ "$status" -eq 0 ]
+  [[ "$output" != *ASKED* ]]
+  [[ "$output" == *"Firmware updates available: 2 (not installed; run 'sudo fwupdmgr update')"* ]]
+  run ! grep -q '^update' "${TEST_TMP}/fw.argv"
+}
+
+@test "firmware: answer no installs nothing and leaves them pending" {
+  fw_apply
+  um_have_tty() { return 0; }
+  um_fw_confirm() { return 1; }
+  um_firmware_phase > /dev/null
+  [ "${UM_CAP[firmware_pending]}" = "2" ]
+  run ! grep -q '^update' "${TEST_TMP}/fw.argv"
+}
+
+@test "firmware: answer yes installs with every no-prompt flag" {
+  fw_apply
+  um_have_tty() { return 0; }
+  um_fw_confirm() { return 0; }
+  um_firmware_phase > /dev/null
+  grep -qx -- 'update --assume-yes --no-reboot-check --no-unreported-check --no-remote-check --no-security-fix' "${TEST_TMP}/fw.argv"
+  [ "$(cat "${TEST_TMP}/fw.stdin")" = "/dev/null" ]
+  [ "${UM_CAP[firmware_installed]}" = "1" ]
+}
+
+@test "firmware: install failure returns 14" {
+  fw_apply; echo 1 > "${TEST_TMP}/fw.update_rc"
+  um_have_tty() { return 0; }
+  um_fw_confirm() { return 0; }
+  run um_firmware_phase
+  [ "$status" -eq 14 ]
+  [[ "$output" == *"error: "* ]]
+}
+
+@test "firmware: install exit 2 (nothing done) is not a failure" {
+  fw_apply; echo 2 > "${TEST_TMP}/fw.update_rc"
+  um_have_tty() { return 0; }
+  um_fw_confirm() { return 0; }
+  um_firmware_phase > /dev/null
+  [ -z "${UM_CAP[firmware_installed]:-}" ]
+}
+
+@test "firmware: old fwupd without the no-prompt flags never installs" {
+  fw_apply; printf '  -y, --assume-yes\n' > "${TEST_TMP}/fw.help"
+  um_have_tty() { return 0; }
+  um_fw_confirm() { return 0; }
+  um_firmware_phase > /dev/null
+  run ! grep -q '^update' "${TEST_TMP}/fw.argv"
+  [ "${UM_CAP[firmware_pending]}" = "2" ]
+}
+
+@test "firmware: refresh failure is a warning and the run continues" {
+  fw_apply; echo 1 > "${TEST_TMP}/fw.refresh_rc"
+  um_have_tty() { return 1; }
+  run um_firmware_phase
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"warning: "*"refresh"* ]]
+}
+
+@test "firmware: dry run never refreshes or installs" {
+  fw_apply; export UM_APPLY=0
+  run um_firmware_phase
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"System Firmware: 2.6.0"* ]]
+  [ ! -e "${TEST_TMP}/fw.argv" ]
+}
+
+@test "firmware: no section on systems without fwupd" {
+  source "${UM_LIB}/firmware.sh"
+  UM_CAP[firmware_available]=0
+  run um_firmware_phase
+  [ -z "$output" ]
+}
+
+@test "firmware: an unanswered question counts as no" {
+  source "${UM_LIB}/firmware.sh"
+  # read gets EOF at once instead of waiting 300 s; same path as a timeout.
+  run um_fw_confirm 2 /dev/null
+  [ "$status" -ne 0 ]
+}
+
+@test "result block recommends pending firmware and names a firmware failure" {
+  source "${UM_LIB}/summary.sh"
+  UM_CAP[firmware_pending]=2
+  run um_result_print 0
+  [[ "$output" == *"Recommended: install 2 firmware update(s): sudo fwupdmgr update"* ]]
+  UM_CAP[firmware_pending]=""; UM_CAP[firmware_installed]=1
+  run um_result_print 0
+  [[ "$output" == *"Recommended: restart to finish the firmware update."* ]]
+  run um_result_print 14
+  [[ "$output" == *"Firmware step failed; see its section above."* ]]
+}
+
+@test "a firmware failure stops the run unless --continue-on-pm-failure" {
+  local cont
+  for cont in 0 1; do
+    run bash -c "
+      source '${UM_LIB}/common.sh'
+      um_source_libs
+      UM_APPLY=1 UM_CONTINUE_ON_FAILURE=${cont}
+      um_run_probes() { UM_CAP[apt_available]=0; }
+      um_manifest_print() { :; }
+      um_need_root() { :; }
+      um_summary_init() { :; }
+      um_summary_snapshot() { :; }
+      um_summary_print() { echo SUMMARY-RAN; }
+      um_stability_gate() { return 0; }
+      um_firmware_phase() { return 14; }
+      um_run_dag
+    "
+    [ "$status" -eq 14 ]
+    if [ "$cont" -eq 1 ]; then [[ "$output" == *SUMMARY-RAN* ]]; else [[ "$output" != *SUMMARY-RAN* ]]; fi
+  done
+}
+
+@test "help lists exit code 14 and firmware under --continue-on-pm-failure" {
+  um_cli --help
+  [[ "$output" == *"14  firmware phase failed"* ]]
+  [[ "$output" == *"snap/flatpak/topgrade/firmware fails"* ]]
+}
+
+@test "firmware: no terminal is detected when stdin is not one" {
+  source "${UM_LIB}/firmware.sh"
+  run um_have_tty < /dev/null
+  [ "$status" -ne 0 ]
 }

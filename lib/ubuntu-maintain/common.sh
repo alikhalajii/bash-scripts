@@ -30,6 +30,7 @@ declare -gA UM_CAP=()
   readonly UM_EXIT_SNAP=11
   readonly UM_EXIT_FLATPAK=12
   readonly UM_EXIT_TOPGRADE=13
+  readonly UM_EXIT_FIRMWARE=14
   readonly UM_EXIT_USAGE=64; }
 
 um_die() {
@@ -118,7 +119,7 @@ Options:
   --manifest-only         Print manifest and exit
   --with-topgrade         Also run topgrade for pip/cargo/npm/etc. as the invoking user
                           (its system/snap/flatpak steps are disabled; this tool does those)
-  --continue-on-pm-failure  Continue if snap/flatpak/topgrade fails (apt failure always stops)
+  --continue-on-pm-failure  Continue if snap/flatpak/topgrade/firmware fails (apt failure always stops)
   --ignore-stability      Do not exit 2 on failed units, pending reboot, or dpkg errors
   --restart-services      Auto-restart services (needrestart mode a); risky
   --log-file PATH         Log file (default: /tmp/ubuntu-maintain.<uid>.log)
@@ -139,6 +140,7 @@ Exit codes:
   11  snap phase failed
   12  flatpak phase failed
   13  topgrade phase failed
+  14  firmware phase failed
   64  usage error (unknown flag, missing value, sudo unavailable, auth failed,
       or the tool's files are writable by other users)
 EOF
@@ -239,6 +241,8 @@ um_source_libs() {
   source "${UM_LIB_DIR}/journal.sh"
   # shellcheck source=topgrade.sh
   source "${UM_LIB_DIR}/topgrade.sh"
+  # shellcheck source=firmware.sh
+  source "${UM_LIB_DIR}/firmware.sh"
   # shellcheck source=summary.sh
   source "${UM_LIB_DIR}/summary.sh"
   # shellcheck source=dag.sh

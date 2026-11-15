@@ -153,6 +153,7 @@ um_result_print() {
     "${UM_EXIT_SNAP}")     verdict="Snap step failed; see its section above." ;;
     "${UM_EXIT_FLATPAK}")  verdict="Flatpak step failed; see its section above." ;;
     "${UM_EXIT_TOPGRADE}") verdict="Topgrade step failed; see its section above." ;;
+    "${UM_EXIT_FIRMWARE}") verdict="Firmware step failed; see its section above." ;;
     *)                     verdict="Finished with errors." ;;
   esac
   # Hints follow the gate's reasons, also when --ignore-stability kept the exit code at 0.
@@ -164,6 +165,12 @@ um_result_print() {
   for issue in "${next[@]}"; do printf 'Next: %s\n' "$issue"; done
   if [[ -n "${UM_CAP[restart_reason]:-}" ]]; then
     printf 'Recommended: reboot or log out and in (%s).\n' "${UM_CAP[restart_reason]}"
+  fi
+  if [[ "${UM_CAP[firmware_pending]:-0}" =~ ^[1-9][0-9]*$ ]]; then
+    printf 'Recommended: install %s firmware update(s): sudo fwupdmgr update\n' "${UM_CAP[firmware_pending]}"
+  fi
+  if [[ "${UM_CAP[firmware_installed]:-0}" -eq 1 ]]; then
+    printf 'Recommended: restart to finish the firmware update.\n'
   fi
   if [[ ${#UM_ISSUES[@]} -gt 0 ]]; then
     printf '%s\n' "${UM_ISSUES[@]}" | awk '!seen[$0]++ {print "  ! " $0}'
