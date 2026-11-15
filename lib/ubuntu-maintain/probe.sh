@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# probe.sh — Read-only detection: OS, package managers, apt locks, health, firmware.
+# probe.sh — Read-only detection: OS, package managers, apt locks, health, firmware,
+#           Docker (um_probe_docker, in docker.sh).
 #           Results go to UM_CAP[]; nothing here changes the system.
 # Provides: um_run_probes, um_probe_*, um_fw_cmd, um_fw_parse_updates, um_is_wsl,
 #           um_reboot_required_file, um_classify_failed_units, um_unit_expected_failure
@@ -382,6 +383,7 @@ um_run_probes() {
   um_probe_flatpak
   um_probe_topgrade
   um_probe_firmware
+  um_probe_docker
   um_probe_coexistence
   um_probe_health_preflight
   um_probe_eol_warning

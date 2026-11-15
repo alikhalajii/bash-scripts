@@ -1,0 +1,142 @@
+#!/bin/bash
+# fake-docker — Stand-in for the docker CLI in tests/docker.bats; never talks to a daemon.
+# Purpose:  serve the listings docker.sh asks for from small state files in its own
+#           directory, change that state on rm/prune the way Docker does (refusing what
+#           Docker refuses), and record every call.
+# Provides: reads images.tsv, containers.tsv, volumes.tsv, cache.tsv, info.json (layouts
+#           under "state helpers" below; variants in state-*/ replace single files);
+#           writes `calls` (one line per call, arguments TAB-joined, newlines as \n) and
+#           `forbidden` (any call docker.sh must never make: exit 99). A file fail-<cmd> or
+#           fail-<cmd>-<sub> (e.g. fail-image, fail-container-rm) makes that call fail.
+# Example:  tests/docker.bats copies this file next to a state copy: fake_docker [variant]
+set -u
+dir="$(cd "$(dirname "$0")" && pwd)"
+T=$'\t'
+
+log_call() {
+  local a; local -a out=()
+  for a in "$@"; do out+=("${a//$'\n'/\\n}"); done
+  (IFS="$T"; printf '%s\n' "${out[*]}") >> "$dir/calls"
+}
+forbid() {
+  printf '%s\n' "$*" >> "$dir/forbidden"
+  printf 'fake-docker: forbidden call: %s\n' "$*" >&2
+  exit 99
+}
+fail() { printf 'Error response from daemon: %s\n' "$*" >&2; exit 1; }
+
+log_call "$@"
+# Fail closed: only the socket next to this file is the fake's daemon.
+[[ "${DOCKER_HOST:-}" == "unix://${dir}/docker.sock" ]] || forbid "DOCKER_HOST=${DOCKER_HOST:-}"
+# The format strings docker.sh uses; any other format is a call the fake does not know.
+# shellcheck source=../../../lib/ubuntu-maintain/docker.sh
+source "$(cat "$dir/libdir")/docker.sh"
+S="$UM_DK_SEP"
+[[ -e "$dir/fail-${1:-}" || -e "$dir/fail-${1:-}-${2:-}" ]] && fail "injected failure"
+
+# --- state helpers ---------------------------------------------------------
+# images.tsv: id, size, created, tags (comma-separated, - for none)
+# containers.tsv: id, status, started, finished, image id, restart, then JSON name,
+#   compose project, compose oneoff, config image; last: size
+img_field() { awk -F"$T" -v id="$1" -v f="$2" '$1 == id { print $f }' "$dir/images.tsv"; }
+tags_of() { local t; t="$(img_field "$1" 4)"; [[ "$t" == - ]] || printf '%s\n' "${t//,/ }"; }
+id_of_ref() {
+  if grep -q "^$1${T}" "$dir/images.tsv"; then printf '%s\n' "$1"; return 0; fi
+  awk -F"$T" -v r="$1" '{ n = split($4, t, ","); for (i = 1; i <= n; i++) if (t[i] == r) print $1 }' "$dir/images.tsv" | grep .
+}
+users_of() { awk -F"$T" -v id="$1" '$5 == id' "$dir/containers.tsv" | wc -l; }
+set_tags() {
+  awk -F"$T" -v OFS="$T" -v id="$1" -v t="$2" '$1 == id { $4 = (t == "" ? "-" : t) } { print }' \
+    "$dir/images.tsv" > "$dir/images.tmp" && mv "$dir/images.tmp" "$dir/images.tsv"
+}
+drop_row() { awk -F"$T" -v id="$2" '$1 != id' "$dir/$1" > "$dir/$1.tmp" && mv "$dir/$1.tmp" "$dir/$1"; }
+
+render_df() {
+  local id size created tags rest
+  while IFS="$T" read -r id size created tags; do
+    printf 'I%s%s%s%s%s%s%s%s\n' "$S" "$id" "$S" "$size" "$S" "$created" "$S" "$(users_of "$id")"
+  done < "$dir/images.tsv"
+  while IFS="$T" read -r id rest; do
+    printf 'C%s%s%s%s\n' "$S" "$id" "$S" "${rest##*"$T"}"
+  done < "$dir/containers.tsv"
+  while IFS="$T" read -r size links rest; do
+    printf 'V%s%s%s%s%s%s\n' "$S" "$size" "$S" "$links" "$S" "$rest"
+  done < "$dir/volumes.tsv"
+}
+render_images() {
+  local id size created tags t
+  while IFS="$T" read -r id size created tags; do
+    if [[ "$tags" == - ]]; then printf '%s%s"<none>"%s"<none>"\n' "$id" "$S" "$S"; continue; fi
+    for t in ${tags//,/ }; do printf '%s%s"%s"%s"%s"\n' "$id" "$S" "${t%:*}" "$S" "${t##*:}"; done
+  done < "$dir/images.tsv"
+}
+render_inspect() {   # FMT_CT: all fields but the size, joined by the separator
+  local row; row="$(grep "^$1${T}" "$dir/containers.tsv")" || { printf 'Error: No such container: %s\n' "$1" >&2; return 1; }
+  row="${row%"${T}"*}"
+  printf '%s\n' "${row//"$T"/"$S"}"
+}
+
+# --- dispatch --------------------------------------------------------------
+case "${1:-} ${2:-}" in
+  "version --format")
+    [[ $# -eq 3 && "$3" == '{{.Server.Version}}' ]] || forbid "$@"
+    echo 28.3.3 ;;
+  "info --format")
+    [[ $# -eq 3 && "$3" == "$UM_DK_FMT_INFO" ]] || forbid "$@"
+    cat "$dir/info.json" ;;
+  "system df")
+    if [[ $# -eq 5 && "$3" == -v && "$4" == --format && "$5" == "$UM_DK_FMT_DF" ]]; then render_df
+    elif [[ $# -eq 4 && "$3" == --format && "$4" == "$UM_DK_FMT_DF_SUM" ]]; then
+      printf 'Images%s1GB (50%%)\nContainers%s0B (0%%)\nLocal Volumes%s1.2GB (99%%)\nBuild Cache%s%s\n' \
+        "$S" "$S" "$S" "$S" "$(cat "$dir/cache.tsv")"
+    else forbid "$@"; fi ;;
+  "image ls")
+    [[ $# -eq 5 && "$3" == --no-trunc && "$4" == --format && "$5" == "$UM_DK_FMT_IMAGES" ]] || forbid "$@"
+    render_images ;;
+  "ps -a")
+    [[ $# -eq 4 && "$3" == --no-trunc && "$4" == -q ]] || forbid "$@"
+    cut -f1 "$dir/containers.tsv" ;;
+  "container inspect")
+    [[ $# -ge 6 && "$3" == --format && "$5" == -- ]] || forbid "$@"
+    fmt="$4"; shift 5; rc=0
+    for id in "$@"; do
+      case "$fmt" in
+        "$UM_DK_FMT_CT") render_inspect "$id" || rc=1 ;;
+        "$UM_DK_FMT_RECHECK")
+          row="$(grep "^${id}${T}" "$dir/containers.tsv")" || { echo "Error: No such container: $id" >&2; rc=1; continue; }
+          IFS="$T" read -r _ st sa fa _ <<<"$row"
+          printf '%s%s%s%s%s\n' "$st" "$S" "$sa" "$S" "$fa" ;;
+        *) forbid "container inspect --format $fmt" ;;
+      esac
+    done
+    exit "$rc" ;;
+  "image inspect")
+    [[ $# -eq 6 && "$3" == --format && "$5" == -- ]] || forbid "$@"
+    id="$(id_of_ref "$6")" || { echo "Error: No such image: $6" >&2; exit 1; }
+    case "$4" in
+      "$UM_DK_FMT_IMGID") printf '%s\n' "$id" ;;
+      "$UM_DK_FMT_NTAGS") n=0; for t in $(tags_of "$id"); do n=$((n + 1)); done; echo "$n" ;;
+      *) forbid "$@" ;;
+    esac ;;
+  "container rm")
+    [[ $# -eq 4 && "$3" == -- ]] || forbid "$@"
+    row="$(grep "^$4${T}" "$dir/containers.tsv")" || { echo "Error: No such container: $4" >&2; exit 1; }
+    IFS="$T" read -r _ st _ <<<"$row"
+    case "$st" in exited | created | dead) ;; *) fail "cannot remove container $4: container is $st" ;; esac
+    drop_row containers.tsv "$4"; echo "$4" ;;
+  "image rm")
+    [[ $# -eq 4 && "$3" == -- ]] || forbid "$@"
+    ref="$4"; id="$(id_of_ref "$ref")" || { echo "Error: No such image: $ref" >&2; exit 1; }
+    read -r -a tags <<<"$(tags_of "$id")"
+    if [[ "$ref" != "$id" && ${#tags[@]} -gt 1 ]]; then   # untag only
+      keep=""; for t in "${tags[@]}"; do [[ "$t" == "$ref" ]] || keep+="${keep:+,}$t"; done
+      set_tags "$id" "$keep"; echo "Untagged: $ref"; exit 0
+    fi
+    [[ "$ref" == "$id" && ${#tags[@]} -gt 1 ]] && fail "conflict: unable to delete $id (must be forced) - image is referenced in multiple repositories"
+    [[ "$(users_of "$id")" -eq 0 ]] || fail "conflict: unable to remove $ref (must force) - container is using its referenced image"
+    drop_row images.tsv "$id"; echo "Deleted: $id" ;;
+  "builder prune")
+    [[ $# -eq 4 && "$3" == --all && "$4" == -f ]] || forbid "$@"
+    printf 'Total reclaimed space: %s\n' "$(cat "$dir/cache.tsv")"; echo 0B > "$dir/cache.tsv" ;;
+  *) forbid "$@" ;;
+esac

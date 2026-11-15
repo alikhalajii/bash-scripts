@@ -13,6 +13,55 @@ setup() {
   source "${UM_LIB}/docker.sh"
 }
 
+# A call the module must never make (force, volumes, system prune...) fails the test.
+teardown() {
+  local bad=0
+  if [ -e "${TEST_TMP}/dk/forbidden" ]; then
+    printf 'forbidden docker calls:\n'; cat "${TEST_TMP}/dk/forbidden"; bad=1
+  fi
+  rm -rf "$TEST_TMP"
+  return "$bad"
+}
+
+# fake_docker [VARIANT]: a fresh copy of the fake and its state (tests/fixtures/docker),
+# with a real socket file; the module is pointed at it and sees no container, no systemd.
+fake_docker() {
+  local d="${TEST_TMP}/dk" fx="${BATS_TEST_DIRNAME}/fixtures/docker"
+  rm -rf "$d"; mkdir -p "$d"
+  cp "$fx"/state/* "$d"/
+  if [ -n "${1:-}" ]; then cp "$fx/state-$1"/* "$d"/; fi
+  cp "$fx/fake-docker" "$d/docker"; chmod 755 "$d/docker"
+  printf '%s\n' "$UM_LIB" > "$d/libdir"
+  python3 -c 'import socket, sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "$d/docker.sock"
+  : > "$d/calls"
+  export UM_DOCKER_BIN="$d/docker" UM_DOCKER_SOCK="$d/docker.sock"
+  fake_bin systemd-detect-virt 'exit 1'
+  um_docker_in_container() { return 1; }
+  um_docker_has_systemd() { return 1; }
+}
+
+# collect: read the fake's state in this shell (monthly), then forget the read calls.
+collect() {
+  UM_MODE=monthly
+  um_docker_collect > /dev/null
+  : > "${TEST_TMP}/dk/calls"
+}
+
+# item NAME: the number of the listed item whose name starts with NAME.
+item() {
+  local i
+  for i in "${!UM_DK_NAME[@]}"; do
+    [[ "${UM_DK_NAME[i]}" == "$1"* ]] && { echo "$i"; return 0; }
+  done
+  return 1
+}
+
+removal_calls() { grep -E $'^(container\trm|image\trm|builder\tprune)' "${TEST_TMP}/dk/calls" || true; }
+
+assert_readonly_calls() {
+  [ -z "$(removal_calls)" ] && [ ! -e "${TEST_TMP}/dk/forbidden" ]
+}
+
 @test "docker size: decimal units, fractions, leading zeros, df suffix" {
   run um_docker_size_bytes 0B;            [ "$output" = 0 ]
   run um_docker_size_bytes 846kB;         [ "$output" = 846000 ]
@@ -104,4 +153,107 @@ setup() {
     run um_docker_parse_pick "$t" 9
     [ "$status" -eq 1 ]; [ "$output" = "$t" ]; done
   run um_docker_parse_pick '2 x 5' 9; [ "$status" -eq 1 ]; [ "$output" = x ]
+}
+
+@test "docker probe: not installed is silent and unavailable" {
+  um_probe_docker
+  [ "${UM_CAP[docker_available]}" = 0 ] && [ -z "${UM_CAP[docker_note]}" ]
+  [ "${UM_CAP[docker_running]}" = n/a ]
+}
+
+@test "docker probe: snap docker gets the snap note" {
+  touch "$TEST_TMP/snapdocker"; UM_DOCKER_SNAP_BIN="$TEST_TMP/snapdocker" um_probe_docker
+  [ "${UM_CAP[docker_note]}" = "Docker from snap is not supported here" ]
+  [ "${UM_CAP[docker_available]}" = 0 ]
+}
+
+@test "docker probe: unsafe binary is skipped with a note" {
+  fake_docker; chmod 775 "$UM_DOCKER_BIN"; um_probe_docker
+  [[ "${UM_CAP[docker_note]}" == *"writable by other users"* ]]
+  [ ! -s "$TEST_TMP/dk/calls" ]; chmod 755 "$UM_DOCKER_BIN"
+}
+
+@test "docker probe: inside a container is skipped with a note" {
+  fake_docker; um_docker_in_container() { return 0; }; um_probe_docker
+  [ "${UM_CAP[docker_note]}" = "inside a container; Docker cleanup skipped" ]
+  [ ! -s "$TEST_TMP/dk/calls" ]
+}
+
+@test "docker probe: systemd-detect-virt or a container marker file means a container" {
+  fake_bin systemd-detect-virt 'echo docker'; um_docker_in_container
+  fake_bin systemd-detect-virt 'echo wsl'
+  UM_DOCKER_CONTAINER_FILES="$TEST_TMP/none" run um_docker_in_container; [ "$status" -eq 1 ]
+  fake_bin systemd-detect-virt 'echo none; exit 1'
+  UM_DOCKER_CONTAINER_FILES="$TEST_TMP/none" run um_docker_in_container; [ "$status" -eq 1 ]
+  touch "$TEST_TMP/.dockerenv"; UM_DOCKER_CONTAINER_FILES="$TEST_TMP/.dockerenv" um_docker_in_container
+}
+
+@test "docker probe: inactive service never calls docker" {
+  fake_docker; unset UM_DOCKER_SOCK; um_docker_has_systemd() { return 0; }
+  fake_bin systemctl 'exit 3'
+  um_probe_docker
+  [ "${UM_CAP[docker_running]}" = 0 ] && [ ! -s "$TEST_TMP/dk/calls" ]
+}
+
+@test "docker probe: no socket means not running, without calling docker" {
+  fake_docker; rm "$TEST_TMP/dk/docker.sock"; um_probe_docker
+  [ "${UM_CAP[docker_running]}" = 0 ] && [ ! -s "$TEST_TMP/dk/calls" ]
+}
+
+@test "docker probe: unreadable daemon as non-root suggests --apply, never the group" {
+  fake_docker; touch "$TEST_TMP/dk/fail-version"; um_probe_docker
+  [ "${UM_CAP[docker_note]}" = "could not read Docker without root; run with --apply to list it" ]
+  [ "${UM_CAP[docker_running]}" = unknown ]
+}
+
+@test "docker probe: daily mode checks the daemon but never reads disk usage" {
+  fake_docker; UM_MODE=daily um_probe_docker
+  grep -q "^version" "$TEST_TMP/dk/calls"
+  run ! grep -q "^system" "$TEST_TMP/dk/calls"
+  [ "${UM_CAP[docker_running]}" = 1 ] && [ "${UM_CAP[docker_removable_images]}" = n/a ]
+}
+
+@test "docker probe: monthly counts removable images and stopped containers" {
+  fake_docker; UM_MODE=monthly um_probe_docker > /dev/null
+  [ "${UM_CAP[docker_removable_images]}" = 4 ] && [ "${UM_CAP[docker_stopped_containers]}" = 2 ]
+}
+
+@test "docker collect: items numbered in display order" {
+  fake_docker; collect
+  [ "${UM_DK_NAME[1]}" = old-web ] && [ "${UM_DK_DATE[1]}" = "never run" ]
+  [ "${UM_DK_NAME[2]%% *}" = old-db ] && [ "${UM_DK_DATE[2]}" = 2026-05-02 ]
+  [ "${UM_DK_NAME[3]}" = demo/big:3 ] && [ "${UM_DK_NEEDS[4]}" = "1 2" ]
+  [ "${UM_DK_TAGS[5]}" = "demo/base:1 demo/base:latest" ] && [ "${UM_DK_DATE[5]}" = unknown ]
+  [ "${UM_DK_NAME[6]}" = "<none> 0e0e0e0e0e0e" ] && [ -z "${UM_DK_TAGS[6]}" ]
+  [ "${UM_DK_KIND[7]}" = cache ] && [ "${#UM_DK_ID[@]}" -eq 7 ]
+  [ "${UM_DK_BYTES[7]}" = 1400000000 ]
+  [[ "$UM_DK_KEPT" == "Kept: 1 image (420 MB) used by running container app-1" ]]
+  [ "${#UM_DK_VOLUMES[@]}" -eq 3 ] && [ "$UM_DK_VOLTOTAL" = "1.2 GB" ]
+}
+
+@test "docker collect: hostile name neutralized, malformed record dropped" {
+  fake_docker hostile; UM_MODE=monthly um_docker_collect > "$TEST_TMP/out"
+  grep -q 'warning: Docker: skipped an unreadable record' "$TEST_TMP/out"
+  [[ "${UM_DK_NAME[*]}" != *$'\e'* && "${UM_DK_NAME[*]}" != *$'\x1f'* ]]
+  [[ "${UM_DK_NAME[*]}" == *'old?]0;x?db [compose shop?x]'* ]]
+  [ "${#UM_DK_ID[@]}" -eq 7 ]
+}
+
+@test "docker collect: a failing list call leaves no list and a note" {
+  fake_docker; collect; [ "${#UM_DK_ID[@]}" -eq 7 ]
+  touch "$TEST_TMP/dk/fail-image"
+  run ! um_docker_collect      # status
+  um_docker_collect || true    # state, in this shell
+  [ "${#UM_DK_ID[@]}" -eq 0 ] && [[ "${UM_CAP[docker_note]}" == "could not read Docker ("* ]]
+}
+
+@test "docker collect: containerd store marks sizes approximate, N/A is unknown" {
+  fake_docker containerd; collect
+  [ "$UM_DK_ABOUT" = 1 ] && [ "${UM_DK_NAME[6]}" = demo/big:3 ] && [ -z "${UM_DK_BYTES[6]}" ]
+}
+
+@test "docker collect: only read-only calls" {
+  fake_docker; UM_MODE=monthly um_docker_collect > /dev/null
+  assert_readonly_calls
+  [ "$(grep -c '^system' "$TEST_TMP/dk/calls")" -eq 2 ]
 }
