@@ -673,6 +673,12 @@ um_docker_remove_image() {
     return 1
   fi
   for t in "${tags[@]:0:${#tags[@]}-1}"; do
+    # Again right before untagging: a pull or build may have moved the tag meanwhile.
+    cur="$(um_docker_cmd image inspect --format "$UM_DK_FMT_IMGID" -- "$t" 2>/dev/null)" || cur=""
+    if [[ "$cur" != "$id" ]]; then
+      um_log "warning: Docker: ${t} now points to another image; not removed"
+      return 1
+    fi
     if ! err="$(um_docker_cmd --slow image rm -- "$t" 2>&1 >/dev/null)"; then
       um_log "warning: Docker: could not remove ${name}: ${err}"
       return 1

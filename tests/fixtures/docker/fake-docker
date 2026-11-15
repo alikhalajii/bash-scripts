@@ -8,7 +8,8 @@
 #           writes `calls` (one line per call, arguments TAB-joined, newlines as \n) and
 #           `forbidden` (any call docker.sh must never make: exit 99). A file fail-<cmd> or
 #           fail-<cmd>-<sub> (e.g. fail-image, fail-container-rm) makes that call fail;
-#           fail-once-<cmd>-<sub> only the next such call.
+#           fail-once-<cmd>-<sub> only the next such call. An executable hook-ntags runs
+#           after answering a tag-count inspect.
 # Example:  tests/docker.bats copies this file next to a state copy: fake_docker [variant]
 set -u
 dir="$(cd "$(dirname "$0")" && pwd)"
@@ -117,7 +118,10 @@ case "${1:-} ${2:-}" in
     id="$(id_of_ref "$6")" || { echo "Error: No such image: $6" >&2; exit 1; }
     case "$4" in
       "$UM_DK_FMT_IMGID") printf '%s\n' "$id" ;;
-      "$UM_DK_FMT_NTAGS") n=0; for t in $(tags_of "$id"); do n=$((n + 1)); done; echo "$n" ;;
+      "$UM_DK_FMT_NTAGS")
+        n=0; for t in $(tags_of "$id"); do n=$((n + 1)); done; echo "$n"
+        # Tests change the state here, between the re-check and the removal.
+        if [[ -x "$dir/hook-ntags" ]]; then "$dir/hook-ntags"; fi ;;
       *) forbid "$@" ;;
     esac ;;
   "container rm")

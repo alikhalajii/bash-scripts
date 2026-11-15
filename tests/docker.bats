@@ -480,6 +480,18 @@ image	rm	--	${UM_DK_ID[5]}" ]
   state_has images.tsv "${UM_DK_ID[5]}" && state_has images.tsv "$new"
 }
 
+@test "docker remove: a tag moved after the re-check is not untagged" {
+  fake_docker; collect; answers=(5 y)
+  local new
+  new="sha256:$(printf 'e7%.0s' {1..32})"
+  printf '#!/bin/bash\nd="$(dirname "$0")"\nsed -i "s|demo/base:1,demo/base:latest|demo/base:latest|" "$d/images.tsv"\nprintf "%%s\\t5MB\\t2026-11-10 10:00:00 +0000 UTC\\tdemo/base:1\\n" %s >> "$d/images.tsv"\n' "$new" > "$TEST_TMP/dk/hook-ntags"
+  chmod 755 "$TEST_TMP/dk/hook-ntags"
+  run um_docker_pick_and_remove
+  [[ "$output" == *"demo/base:1 now points to another image; not removed"* ]]
+  assert_readonly_calls
+  state_has images.tsv "$new"
+}
+
 @test "docker remove: a tag added since the list keeps the image" {
   fake_docker; collect; answers=(6 y)
   sed -i "s|^\(${UM_DK_ID[6]}.*\)\t-$|\1\tdemo/new:1|" "$TEST_TMP/dk/images.tsv"
