@@ -949,7 +949,9 @@ fake_apt_cleanup() {
 [[ "$*" == *"-s autoremove --purge"* ]] && cat "${TEST_TMP}/autoremove.sim"
 exit 0'
   fake_bin dpkg-query 'for a in "$@"; do case "$a" in libstdc++6-old) echo 102400 ;; g++-14) echo 51200 ;; esac; done'
-  fake_bin du 'printf "464896\t/var/cache/apt/archives\n"'
+  # 454 MB until apt-get clean has run, then empty.
+  fake_bin du 'if grep -qx clean "${TEST_TMP}/apt-get.argv" 2>/dev/null; then kib=0; else kib=464896; fi
+printf "%s\t/var/cache/apt/archives\n" "$kib"'
   fake_bin dpkg 'echo "$*" >> "${TEST_TMP}/dpkg.argv"
 [[ "$1" == "-l" ]] && printf "Desired=Unknown\nrc  oldconf  1.0  amd64  gone\nii  keep  1.0  amd64  kept\n"
 exit 0'
@@ -1397,4 +1399,11 @@ fake_dmi() {
   source "${UM_LIB}/firmware.sh"
   run um_system_firmware_line
   [ "$output" = "System firmware: 1.0[2J, released 2025" ]
+}
+
+@test "monthly apply says how much space apt-get clean freed" {
+  fake_apt_cleanup; stub_apt_apply
+  run um_apt_phase
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"download cache cleared (454 MB freed)"* ]]
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # apt_module.sh — APT phase: lock wait, update, upgrade tier, monthly cleanup with preview.
 # Provides: um_apt_phase, um_apt_run, um_apt_simulate_upgrade, um_apt_cleanup_preview,
-#           um_apt_autoremove_guarded, um_list_head, um_pkgs_size_mb
+#           um_apt_autoremove_guarded, um_apt_cache_mb, um_list_head, um_pkgs_size_mb
 # Example:  um_apt_phase || rc=$?          # 0, or UM_EXIT_APT (10) on failure
 # Sourced by: common.sh → um_source_libs
 
@@ -145,6 +145,13 @@ um_pkgs_size_mb() {
     | awk '$1 ~ /^[0-9]+$/ {kib += $1} END {printf "%d\n", (kib + 512) / 1024}'
 }
 
+# Size of apt's download cache in MB (0 when unreadable).
+um_apt_cache_mb() {
+  local kib
+  kib="$(du -sk /var/cache/apt/archives 2>/dev/null | awk '{print $1}')"
+  echo $(( ${kib:-0} / 1024 ))
+}
+
 # Removed packages whose config files are still on disk (dpkg status "rc").
 um_apt_residual_configs() {
   LC_ALL=C dpkg -l 2>/dev/null | awk '$1 == "rc" {print $2}'
@@ -153,7 +160,7 @@ um_apt_residual_configs() {
 # What monthly cleanup will touch. "forecast" (dry run) also lists autoremove, computed
 # before the upgrade; under --apply um_apt_autoremove_guarded lists the real set instead.
 um_apt_cleanup_preview() {
-  local label="${1:-}" kib
+  local label="${1:-}"
   local -a auto=() rc=() obsolete=()
   um_log "Cleanup preview (monthly):"
   if [[ "$label" == "forecast" ]]; then
@@ -166,8 +173,7 @@ um_apt_cleanup_preview() {
   fi
   mapfile -t rc < <(um_apt_residual_configs)
   um_log "  residual configs: ${#rc[@]} package(s)${rc[0]:+: $(um_list_head 10 "${rc[@]}")}"
-  kib="$(du -sk /var/cache/apt/archives 2>/dev/null | awk '{print $1}')"
-  um_log "  download cache: $(( ${kib:-0} / 1024 )) MB (apt-get clean)"
+  um_log "  download cache: $(um_apt_cache_mb) MB (apt-get clean)"
   if [[ "${UM_CAP[apt_obsolete_count]:-unknown}" =~ ^[1-9][0-9]*$ ]]; then
     read -ra obsolete <<<"${UM_CAP[apt_obsolete_list]:-}"
     um_log "  not in any repository (review, never removed): ${UM_CAP[apt_obsolete_count]} package(s): $(um_list_head 10 "${obsolete[@]}")"
@@ -226,7 +232,10 @@ um_apt_phase() {
     um_log "Monthly hygiene: autoremove, clean, residual configs"
     um_apt_cleanup_preview
     um_apt_autoremove_guarded || return "${UM_EXIT_APT}"
+    local cache_before
+    cache_before="$(um_apt_cache_mb)"
     um_apt_run clean || return "${UM_EXIT_APT}"
+    um_log "download cache cleared ($(( cache_before - $(um_apt_cache_mb) )) MB freed)"
     local pkg
     while IFS= read -r pkg; do
       um_sudo dpkg --purge -- "$pkg" 2>/dev/null || true
