@@ -87,3 +87,21 @@ setup() {
   [ "$(um_docker_sock)" = /run/docker.sock ]
   [ "$(um_docker_bin || true)" != "$TEST_TMP/docker" ]
 }
+
+@test "docker pick: numbers, ranges, commas, tabs, duplicates" {
+  [ "$(um_docker_parse_pick '3 1,2-4  4' 9)" = "1 2 3 4" ]
+  [ "$(um_docker_parse_pick $'5\t6' 9)" = "5 6" ]
+  [ "$(um_docker_parse_pick '1,,3' 9)" = "1 3" ]
+  [ "$(um_docker_parse_pick '1 1' 9)" = "1" ]
+  [ "$(um_docker_parse_pick '9' 9)" = "9" ]
+  [ -z "$(um_docker_parse_pick '' 9)" ]
+  [ -z "$(um_docker_parse_pick ' , ' 9)" ]
+}
+
+@test "docker pick: anything arithmetic could misread is not understood" {
+  local t
+  for t in 010 0x2 0 12 3-1 1- -1 2-10 18446744073709551617 'a[$(id)]' 1.5 y all; do
+    run um_docker_parse_pick "$t" 9
+    [ "$status" -eq 1 ]; [ "$output" = "$t" ]; done
+  run um_docker_parse_pick '2 x 5' 9; [ "$status" -eq 1 ]; [ "$output" = x ]
+}

@@ -2,7 +2,8 @@
 # docker.sh — Docker phase (monthly): list stopped containers, images and build cache with
 #             the space each frees; remove only what the user picks and confirms on a terminal.
 # Provides: um_docker_cmd (the only way to call docker), um_docker_bin, um_docker_sock,
-#           um_docker_size_bytes, um_docker_fmt_size, um_docker_safe_text, um_docker_json_str
+#           um_docker_size_bytes, um_docker_fmt_size, um_docker_safe_text, um_docker_json_str,
+#           um_docker_parse_pick
 # Example:  um_docker_cmd version --format '{{.Server.Version}}'
 # Sourced by: common.sh → um_source_libs
 
@@ -151,4 +152,29 @@ um_docker_json_str() {
     done
   fi
   printf '%s\n' "${out//[^ -~]/?}"
+}
+
+# um_docker_parse_pick INPUT N: the item numbers in a picker answer ("3 1,2-4") as
+# "1 2 3 4" (ascending, unique; empty answer -> empty). Tokens are split on spaces, tabs
+# and commas; each must be a number or an ascending range within 1..N, with no leading
+# zero. Otherwise prints the first token that is not understood and returns 1.
+um_docker_parse_pick() {
+  local input="$1" n="$2" tok lo hi i out=""
+  local -a toks=() picked=()
+  IFS=$' \t,' read -r -a toks <<<"$input"
+  for tok in "${toks[@]}"; do
+    [[ -n "$tok" ]] || continue
+    if [[ "$tok" =~ ^([1-9][0-9]{0,3})(-([1-9][0-9]{0,3}))?$ ]]; then
+      lo=$((10#${BASH_REMATCH[1]})) hi="${BASH_REMATCH[3]:-${BASH_REMATCH[1]}}"
+      hi=$((10#$hi))
+      if (( lo <= hi && hi <= n )); then
+        for (( i = lo; i <= hi; i++ )); do picked[i]=1; done
+        continue
+      fi
+    fi
+    printf '%s\n' "$tok"
+    return 1
+  done
+  for i in "${!picked[@]}"; do out+="${out:+ }$i"; done
+  printf '%s\n' "$out"
 }
