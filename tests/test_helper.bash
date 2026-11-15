@@ -11,6 +11,7 @@ setup() {
   source "${UM_LIB}/common.sh"
   source "${UM_LIB}/probe.sh"
   source "${UM_LIB}/manifest.sh"
+  source "${UM_LIB}/summary.sh"
   export UM_APPLY=0
   export UM_AGGRESSIVE=0
   export UM_MODE="daily"
@@ -22,6 +23,8 @@ setup() {
   export UM_BOOT_DIR="${TEST_TMP}/boot" UM_PROC_DIR="${TEST_TMP}/proc" UM_DMI_DIR="${TEST_TMP}/dmi"
   # Never reach the real fwupd daemon (slow, host-dependent): firmware tests replace this.
   fake_bin fwupdmgr 'exit 1'
+  # Never reach a real Docker daemon or read the host's snap: Docker tests use a fake.
+  export UM_DOCKER_BIN=/nonexistent UM_DOCKER_SNAP_BIN=/nonexistent
 }
 
 teardown() {

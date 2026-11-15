@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # firmware.sh — Firmware phase (fwupd): report updates; install only after a y on a terminal.
-# Provides: um_firmware_phase, um_system_firmware_line, um_fw_confirm, um_have_tty,
-#           um_fw_can_install
+# Provides: um_firmware_phase, um_system_firmware_line, um_fw_confirm, um_fw_can_install
 # Example:  um_firmware_phase || rc=$?    # 0, or UM_EXIT_FIRMWARE (14) if an install failed
 # Sourced by: common.sh → um_source_libs
 
@@ -22,23 +21,11 @@ um_fw_can_install() {
   done
 }
 
-# A person is there to answer: stdin is a terminal and a controlling terminal can be opened
-# (false from a timer, cron, or sudo started without a terminal).
-um_have_tty() {
-  [[ -t 0 ]] && { : </dev/tty; } 2>/dev/null
-}
-
-# um_fw_confirm N [INPUT]: ask once; 0 only for y/Y. No answer within 5 minutes is a no.
-# Keys typed before the question (e.g. during the apt output) are discarded first, so only
-# an answer given after reading the question counts.
+# um_fw_confirm N [INPUT]: ask once (um_tty_read_line); 0 only for y/Y. No answer within
+# 5 minutes is a no.
 um_fw_confirm() {
-  local n="$1" input="${2:-/dev/tty}" answer="" fd rc=0
-  exec {fd}<"$input" || return 1
-  while read -r -t 0.2 -u "$fd" _; do :; done
-  read -r -t 300 -u "$fd" -p "Install ${n} firmware update(s) now? A restart may be needed to finish. [y/N] " answer || rc=$?
-  exec {fd}<&-
-  if [[ "$rc" -ne 0 ]]; then
-    printf '\n'
+  local answer=""
+  if ! um_tty_read_line "Install ${1} firmware update(s) now? A restart may be needed to finish. [y/N] " answer "${2:-/dev/tty}"; then
     um_log "No answer; firmware not installed."
     return 1
   fi

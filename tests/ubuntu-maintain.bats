@@ -1328,6 +1328,41 @@ fw_apply() {
   [ "$status" -ne 0 ]
 }
 
+@test "tty helper: a line typed after the prompt is returned" {
+  mkfifo "${TEST_TMP}/in"; exec 7<>"${TEST_TMP}/in"
+  ( sleep 0.5; printf '2 4\n' >&7 ) 3>&- &
+  local ans=""
+  um_tty_read_line "Pick: " ans "${TEST_TMP}/in"
+  exec 7>&-
+  [ "$ans" = "2 4" ]
+}
+
+@test "tty helper: input waiting before the prompt is discarded" {
+  printf 'y\n' > "${TEST_TMP}/typeahead"
+  run um_tty_read_line "Q? " ans "${TEST_TMP}/typeahead"
+  [ "$status" -eq 1 ]
+}
+
+@test "tty helper: no answer within the time limit returns 1" {
+  mkfifo "${TEST_TMP}/in"; exec 7<>"${TEST_TMP}/in"
+  UM_TTY_TIMEOUT=1 run um_tty_read_line "Q? " ans "${TEST_TMP}/in"
+  exec 7>&-
+  [ "$status" -eq 1 ]
+}
+
+@test "tty helper: an invalid time limit falls back to the default" {
+  UM_TTY_TIMEOUT=0 run um_tty_timeout; [ "$output" = 300 ]
+  UM_TTY_TIMEOUT='1;id' run um_tty_timeout; [ "$output" = 300 ]
+  UM_TTY_TIMEOUT=7 run um_tty_timeout; [ "$output" = 7 ]
+}
+
+@test "tty helper: an unsafe variable name is refused" {
+  run um_tty_read_line "Q? " 'a[$(id)]' /dev/null
+  [ "$status" -eq 1 ]
+  run um_tty_read_line "Q? " _um_x /dev/null
+  [ "$status" -eq 1 ]
+}
+
 @test "help explains monthly cleanup, the autoremove limit and the firmware rule" {
   um_cli --help
   [[ "$output" == *"ubuntu-maintain --mode monthly"*"# preview the monthly cleanup"* ]]
