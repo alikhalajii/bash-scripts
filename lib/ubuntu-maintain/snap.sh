@@ -7,6 +7,11 @@ um_snap_preflight_list() {
   LANG=C snap refresh --list 2>/dev/null || true
 }
 
+# Disabled (superseded) snap revisions as "name rev" lines; monthly removes them.
+um_snap_disabled_revisions() {
+  LC_ALL=C snap list --all 2>/dev/null | awk 'NR>1 && $NF ~ /(^|,)disabled(,|$)/ {print $1, $3}' || true
+}
+
 um_snap_phase() {
   [[ "${UM_CAP[snap_has_packages]:-0}" -eq 1 ]] || return 0
 
@@ -15,7 +20,13 @@ um_snap_phase() {
 
   if [[ "${UM_APPLY}" -eq 0 ]]; then
     um_log "[dry-run] would run: snap refresh"
-    [[ "${UM_MODE}" == "monthly" ]] && um_log "[dry-run] would prune disabled snap revisions"
+    if [[ "${UM_MODE}" == "monthly" ]]; then
+      local -a revs=()
+      mapfile -t revs < <(um_snap_disabled_revisions)
+      [[ ${#revs[@]} -gt 0 ]] || um_log "[dry-run] no disabled snap revisions to remove"
+      local rev
+      for rev in "${revs[@]}"; do um_log "[dry-run] would remove disabled revision: ${rev}"; done
+    fi
     return 0
   fi
 
@@ -26,10 +37,11 @@ um_snap_phase() {
 
   if [[ "${UM_MODE}" == "monthly" ]]; then
     um_log "Removing disabled snap revisions (monthly)..."
-    LANG=C snap list --all 2>/dev/null | awk 'NR>1 && $NF ~ /(^|,)disabled(,|$)/ {print $1, $3}' | while read -r name rev; do
+    local name rev
+    while read -r name rev; do
       [[ -n "$name" && -n "$rev" ]] || continue
       um_sudo snap remove "$name" --revision="$rev" 2>/dev/null || true
-    done || true
+    done < <(um_snap_disabled_revisions)
     um_sudo rm -rf /var/lib/snapd/cache/* 2>/dev/null || true
   fi
 

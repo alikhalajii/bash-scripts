@@ -1120,3 +1120,21 @@ esac'
   [ "$status" -eq 0 ]
   [[ "$output" == *"warning: "* ]]
 }
+
+@test "monthly snap dry run lists disabled revisions" {
+  source "${UM_LIB}/snap.sh"
+  export UM_MODE=monthly UM_APPLY=0
+  UM_CAP[snap_has_packages]=1
+  fake_bin snap 'echo "$*" >> "${TEST_TMP}/snap.argv"
+if [[ "$*" == "list --all" ]]; then
+  printf "Name    Version   Rev   Tracking       Publisher  Notes\n"
+  printf "core22  20240111  1748  latest/stable  pub        base,disabled\n"
+  printf "core22  20240408  1380  latest/stable  pub        base\n"
+fi
+exit 0'
+  run um_snap_phase
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"would remove disabled revision: core22 1748"* ]]
+  [[ "$output" != *"core22 1380"* ]]
+  run ! grep -q '^remove' "${TEST_TMP}/snap.argv"
+}
