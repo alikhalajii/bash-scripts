@@ -407,6 +407,8 @@ um_docker_collect() {
         || ! name="$(um_docker_json_str "${f[6]}")" || ! proj="$(um_docker_json_str "${f[7]}")" \
         || ! k="$(um_docker_json_str "${f[8]}")" || ! tag="$(um_docker_json_str "${f[9]}")"; then
       um_docker_bad_record
+      # Fail closed: the image of a container we cannot read is not offered.
+      [[ "${f[4]:-}" =~ $UM_DK_RE_IMAGE ]] && img_bad[${f[4]}]=1
       continue
     fi
     id="${f[0]}" name="$(um_docker_safe_text "${name#/}" 200)"

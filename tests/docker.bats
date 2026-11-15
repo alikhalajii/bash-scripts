@@ -257,7 +257,9 @@ assert_readonly_calls() {
   grep -q 'warning: Docker: skipped an unreadable record' "$TEST_TMP/out"
   [[ "${UM_DK_NAME[*]}" != *$'\e'* && "${UM_DK_NAME[*]}" != *$'\x1f'* ]]
   [[ "${UM_DK_NAME[*]}" == *'old?]0;x?db [compose shop?x]'* ]]
-  [ "${#UM_DK_ID[@]}" -eq 7 ]
+  # The malformed record uses demo/db:2: that image is withheld (fail closed).
+  [ "${#UM_DK_ID[@]}" -eq 6 ]
+  run ! item demo/db
 }
 
 @test "docker collect: a label that is not set (null) is empty, not unreadable" {
@@ -276,6 +278,15 @@ assert_readonly_calls() {
   UM_MODE=monthly um_docker_collect > /dev/null
   [ "${#UM_DK_ID[@]}" -eq 6 ]
   [[ "${UM_DK_NAME[*]}" != *demo/base* ]]
+}
+
+@test "docker collect: an unreadable container record keeps its image off the list" {
+  fake_docker
+  sed -i 's|\tunless-stopped\t"/app-1"|\t<no value>\t"/app-1"|' "$TEST_TMP/dk/containers.tsv"
+  grep -q '<no value>' "$TEST_TMP/dk/containers.tsv"
+  UM_MODE=monthly um_docker_collect > /dev/null
+  run ! item demo/app
+  [ "${#UM_DK_ID[@]}" -eq 7 ]
 }
 
 @test "docker collect: a failing list call leaves no list and a note" {
