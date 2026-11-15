@@ -292,6 +292,8 @@ um_source_libs() {
   source "${UM_LIB_DIR}/topgrade.sh"
   # shellcheck source=firmware.sh
   source "${UM_LIB_DIR}/firmware.sh"
+  # shellcheck source=docker.sh
+  source "${UM_LIB_DIR}/docker.sh"
   # shellcheck source=summary.sh
   source "${UM_LIB_DIR}/summary.sh"
   # shellcheck source=dag.sh
