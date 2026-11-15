@@ -235,6 +235,8 @@ um_source_libs() {
   source "${UM_LIB_DIR}/flatpak.sh"
   # shellcheck source=stability.sh
   source "${UM_LIB_DIR}/stability.sh"
+  # shellcheck source=journal.sh
+  source "${UM_LIB_DIR}/journal.sh"
   # shellcheck source=topgrade.sh
   source "${UM_LIB_DIR}/topgrade.sh"
   # shellcheck source=summary.sh

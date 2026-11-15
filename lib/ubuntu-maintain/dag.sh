@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dag.sh — Orchestrate probes → manifest → apt → snap → flatpak → topgrade → stability.
+# dag.sh — Orchestrate probes → manifest → apt → snap → flatpak → journal → topgrade → stability.
 # Provides: um_run_dag
 # Sourced by: common.sh → um_source_libs
 
@@ -75,6 +75,9 @@ um_run_dag() {
       return $(( exit_code != 0 ? exit_code : stab_rc ))
     fi
   fi
+
+  # Not a package manager: a failed trim is a warning and never changes the exit code.
+  um_journal_phase || true
 
   um_topgrade_phase || topgrade_rc=$?
   if [[ "$topgrade_rc" -ne 0 ]]; then

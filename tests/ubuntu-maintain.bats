@@ -1054,3 +1054,69 @@ fake_autoremove_count() {
   run ! grep -q anydesk "${TEST_TMP}/apt-get.argv"
   run ! grep -q anydesk "${TEST_TMP}/dpkg.argv"
 }
+
+# journalctl fake: --disk-usage reports ${TEST_TMP}/journal.size; vacuum calls are logged and
+# exit with ${TEST_TMP}/journal.rc (default 0).
+fake_journal() {
+  source "${UM_LIB}/journal.sh"
+  um_sudo() { "$@"; }
+  echo "$1" > "${TEST_TMP}/journal.size"
+  fake_bin journalctl 'printf "%s" "${LC_ALL:-}" > "${TEST_TMP}/journalctl.lc_all"
+case "$1" in
+  --disk-usage) echo "Archived and active journals take up $(cat "${TEST_TMP}/journal.size") in the file system." ;;
+  --vacuum-size=*) echo "$*" >> "${TEST_TMP}/journalctl.argv"; exit "$(cat "${TEST_TMP}/journal.rc" 2>/dev/null || echo 0)" ;;
+esac'
+}
+
+@test "journal usage parses decimals and units" {
+  local pair
+  for pair in "4.0K:4096" "512.0M:536870912" "1.2G:1288490188" "880B:880"; do
+    fake_journal "${pair%%:*}"
+    run um_journal_usage_bytes
+    [ "$output" = "${pair#*:}" ]
+  done
+  [ "$(cat "${TEST_TMP}/journalctl.lc_all")" = "C" ]
+}
+
+@test "journal phase trims only above the cap" {
+  export UM_MODE=monthly UM_APPLY=1
+  fake_journal 1.2G
+  run um_journal_phase
+  [ "$status" -eq 0 ]
+  grep -qx -- '--vacuum-size=500M' "${TEST_TMP}/journalctl.argv"
+  rm -f "${TEST_TMP}/journalctl.argv"
+  fake_journal 183.0M
+  run um_journal_phase
+  [[ "$output" == *"183.0M, under the 500M cap"* ]]
+  [ ! -e "${TEST_TMP}/journalctl.argv" ]
+}
+
+@test "journal dry run says what it would do and changes nothing" {
+  export UM_MODE=monthly UM_APPLY=0
+  fake_journal 1.2G
+  run um_journal_phase
+  [[ "$output" == *"=== Journal ==="* ]]
+  [[ "$output" == *"1.2G in use, would trim archived files to 500M"* ]]
+  [ ! -e "${TEST_TMP}/journalctl.argv" ]
+}
+
+@test "journal phase is skipped outside monthly and without journalctl" {
+  fake_journal 1.2G
+  export UM_APPLY=1 UM_MODE=daily
+  run um_journal_phase
+  [ -z "$output" ]
+  export UM_MODE=monthly
+  um_probe_command() { [[ "$1" != journalctl ]]; }
+  run um_journal_phase
+  [ -z "$output" ]
+  [ ! -e "${TEST_TMP}/journalctl.argv" ]
+}
+
+@test "journal: a failing vacuum is a warning, not a failure" {
+  export UM_MODE=monthly UM_APPLY=1
+  fake_journal 1.2G
+  echo 1 > "${TEST_TMP}/journal.rc"
+  run um_journal_phase
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"warning: "* ]]
+}

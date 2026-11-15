@@ -80,6 +80,9 @@ um_manifest_planned_phases() {
     um_log "  - flatpak update"
     if [[ "${UM_MODE}" == "monthly" ]]; then um_log "  - flatpak uninstall --unused (monthly)"; fi
   fi
+  if [[ "${UM_MODE}" == "monthly" ]] && um_probe_command journalctl; then
+    um_log "  - journal: trim archived logs to 500M (monthly)"
+  fi
   if [[ "${UM_WITH_TOPGRADE}" -eq 1 && "${UM_CAP[topgrade_available]:-0}" -eq 1 ]]; then
     um_log "  - topgrade (language/user PMs)"
   fi
