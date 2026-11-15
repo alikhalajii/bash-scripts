@@ -19,6 +19,8 @@ setup() {
   # Restart checks read /boot and /proc: use empty fakes so results do not depend on the host.
   mkdir -p "${TEST_TMP}/boot" "${TEST_TMP}/proc"
   export UM_BOOT_DIR="${TEST_TMP}/boot" UM_PROC_DIR="${TEST_TMP}/proc"
+  # Never reach the real fwupd daemon (slow, host-dependent): firmware tests replace this.
+  fake_bin fwupdmgr 'exit 1'
 }
 
 teardown() {
@@ -1137,4 +1139,70 @@ exit 0'
   [[ "$output" == *"would remove disabled revision: core22 1748"* ]]
   [[ "$output" != *"core22 1380"* ]]
   run ! grep -q '^remove' "${TEST_TMP}/snap.argv"
+}
+
+# fwupdmgr fake: logs argv, locale and stdin; get-updates prints ${TEST_TMP}/fw.out (default:
+# the fixture) and exits ${TEST_TMP}/fw.rc (default 0).
+fake_fwupd() {
+  cp "${BATS_TEST_DIRNAME}/fixtures/fwupd-get-updates.json" "${TEST_TMP}/fw.out"
+  fake_bin fwupdmgr 'echo "$*" >> "${TEST_TMP}/fw.argv"; printf "%s" "${LC_ALL:-}" > "${TEST_TMP}/fw.lc_all"
+readlink "/proc/$$/fd/0" > "${TEST_TMP}/fw.stdin"
+case "$1" in
+  get-updates) cat "${TEST_TMP}/fw.out"; exit "$(cat "${TEST_TMP}/fw.rc" 2>/dev/null || echo 0)" ;;
+esac
+exit 0'
+}
+
+@test "firmware parser lists devices with releases and their new version" {
+  run um_fw_parse_updates < "${BATS_TEST_DIRNAME}/fixtures/fwupd-get-updates.json"
+  [ "$output" = $'System Firmware\t2.6.0\nNVMe Disk\tGXB7801Q' ]
+}
+
+@test "firmware parser prints nothing for non-JSON output" {
+  run um_fw_parse_updates <<< "No updates available"
+  [ -z "$output" ]
+}
+
+@test "firmware parser strips control characters from device strings" {
+  run um_fw_parse_updates <<< $'"Devices": [\n"Name": "Evil\e[2J Device",\n"Releases": [\n"Version": "1.0\a"'
+  [ "$output" = $'Evil[2J Device\t1.0' ]
+}
+
+@test "firmware probe counts updates and never prompts" {
+  fake_fwupd
+  um_probe_firmware
+  [ "${UM_CAP[firmware_available]}" = "1" ]
+  [ "${UM_CAP[firmware_updates]}" = "2" ]
+  [ "$(cat "${TEST_TMP}/fw.argv")" = "get-updates --json" ]
+  [ "$(cat "${TEST_TMP}/fw.lc_all")" = "C" ]
+  [ "$(cat "${TEST_TMP}/fw.stdin")" = "/dev/null" ]
+}
+
+@test "firmware probe: no fwupdmgr means not available" {
+  um_probe_command() { [[ "$1" != fwupdmgr ]]; }
+  um_probe_firmware
+  [ "${UM_CAP[firmware_available]}" = "0" ]
+}
+
+@test "firmware probe: an error leaves the count unknown" {
+  fake_fwupd; echo 1 > "${TEST_TMP}/fw.rc"
+  um_probe_firmware
+  [ "${UM_CAP[firmware_updates]}" = "unknown" ]
+}
+
+@test "firmware probe: nothing to do (2) and no supported devices (3) mean 0 updates" {
+  fake_fwupd
+  local rc
+  for rc in 2 3; do
+    echo "$rc" > "${TEST_TMP}/fw.rc"; echo "No updates available" > "${TEST_TMP}/fw.out"
+    um_probe_firmware
+    [ "${UM_CAP[firmware_updates]}" = "0" ]
+  done
+}
+
+@test "manifest shows the firmware block and planned phase" {
+  { UM_CAP[manifest_timestamp]="test"; UM_CAP[firmware_available]=1; UM_CAP[firmware_updates]=2; }
+  run um_manifest_print
+  [[ "$output" == *$'firmware:\n  available: 1\n  updates: 2'* ]]
+  [[ "$output" == *"  - firmware (report; installing asks first)"* ]]
 }

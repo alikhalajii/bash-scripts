@@ -1,0 +1,50 @@
+{
+  "Devices": [
+    {
+      "Name": "System Firmware",
+      "DeviceId": "a45df35ac0e948ee180fe216a5f703f32dda163f",
+      "Guid": [
+        "230c8b18-8d9b-53ec-838b-6cfc0383493a"
+      ],
+      "Plugin": "uefi_capsule",
+      "Flags": [
+        "internal",
+        "updatable",
+        "needs-reboot"
+      ],
+      "Vendor": "Example Vendor",
+      "Version": "2.5.1",
+      "Releases": [
+        {
+          "AppstreamId": "com.example.SystemFirmware.firmware",
+          "Name": "Example System Update",
+          "Summary": "Firmware for the example laptop",
+          "Version": "2.6.0",
+          "Size": 16781312,
+          "Urgency": "high"
+        }
+      ]
+    },
+    {
+      "Name": "UEFI dbx",
+      "DeviceId": "362301da643102b9f38477387e2193e57abaa590",
+      "Version": "371",
+      "Releases": []
+    },
+    {
+      "Name": "NVMe Disk",
+      "DeviceId": "71b677ca0f1bc2c5b804fa1d59e52064ce589293",
+      "Version": "GXB7601Q",
+      "Releases": [
+        {
+          "Name": "NVMe Disk Update",
+          "Version": "GXB7801Q"
+        },
+        {
+          "Name": "NVMe Disk Older Update",
+          "Version": "GXB7701Q"
+        }
+      ]
+    }
+  ]
+}

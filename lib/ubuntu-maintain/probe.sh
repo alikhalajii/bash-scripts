@@ -116,6 +116,52 @@ um_probe_apt_obsolete() {
   UM_CAP[apt_obsolete_count]="$(awk -F/ '/\[installed/' <<<"$out" | grep -c . || true)"
 }
 
+# Every fwupdmgr query goes through here: C locale, no terminal on stdin (some subcommands
+# otherwise ask questions, e.g. "Restart now?"), and a time limit. Not for `update`: killing
+# the client during a flash is worse than waiting.
+um_fw_cmd() {
+  LC_ALL=C timeout 120 fwupdmgr "$@" </dev/null
+}
+
+# fwupd JSON on stdin -> "<device name>\t<new version>" per device with a release. Line-based
+# (no jq/python): the device "Name" comes before its "Releases" array; the first "Version"
+# inside the array is the newest. Device strings come from hardware and vendors, so control
+# characters (terminal escapes) are removed.
+um_fw_parse_updates() {
+  awk '
+    function val(line) {
+      sub(/^[^:]*:[[:space:]]*"?/, "", line); sub(/"?,?[[:space:]]*$/, "", line)
+      gsub(/[[:cntrl:]]/, "", line); return line
+    }
+    /"Name"[[:space:]]*:/ { name = val($0); next }
+    /"Releases"[[:space:]]*:[[:space:]]*\[[[:space:]]*$/ { dev = name; want = 1; next }
+    want && /"Version"[[:space:]]*:/ { print dev "\t" val($0); want = 0 }
+  '
+}
+
+# firmware_available, firmware_updates (N or "unknown"), firmware_list (parser output).
+# Read-only: uses the metadata fwupd already has (refresh happens only under --apply).
+um_probe_firmware() {
+  UM_CAP[firmware_available]=0
+  UM_CAP[firmware_updates]="unknown"
+  UM_CAP[firmware_list]=""
+  um_probe_command fwupdmgr || return 0
+  UM_CAP[firmware_available]=1
+  local out rc=0
+  out="$(um_fw_cmd get-updates --json 2>/dev/null)" || rc=$?
+  case "$rc" in
+    0 | 2)
+      if [[ "$out" == *'"Devices"'* ]]; then
+        UM_CAP[firmware_list]="$(um_fw_parse_updates <<<"$out")"
+        UM_CAP[firmware_updates]="$(grep -c . <<<"${UM_CAP[firmware_list]}" || true)"
+      elif [[ "$rc" -eq 2 ]]; then
+        UM_CAP[firmware_updates]=0
+      fi ;;
+    3) UM_CAP[firmware_updates]=0 ;; # no supported devices (VMs, containers)
+  esac
+  return 0
+}
+
 um_probe_needrestart() {
   if um_probe_command needrestart; then
     UM_CAP[needrestart_available]=1
@@ -322,6 +368,7 @@ um_run_probes() {
   um_probe_snap
   um_probe_flatpak
   um_probe_topgrade
+  um_probe_firmware
   um_probe_coexistence
   um_probe_health_preflight
   um_probe_eol_warning

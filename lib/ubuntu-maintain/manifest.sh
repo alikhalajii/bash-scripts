@@ -40,6 +40,11 @@ um_manifest_print() {
   um_log "  has_remotes: ${UM_CAP[flatpak_has_remotes]:-0}"
 
   um_log ""
+  um_log "firmware:"
+  um_log "  available: ${UM_CAP[firmware_available]:-0}"
+  um_log "  updates: ${UM_CAP[firmware_updates]:-unknown}"
+
+  um_log ""
   um_log "coexistence:"
   um_log "  unattended-upgrades: ${UM_CAP[unattended_upgrades_active]:-unknown}"
   um_log "  apt-daily.timer: ${UM_CAP[apt_daily_active]:-unknown}"
@@ -85,6 +90,9 @@ um_manifest_planned_phases() {
   fi
   if [[ "${UM_WITH_TOPGRADE}" -eq 1 && "${UM_CAP[topgrade_available]:-0}" -eq 1 ]]; then
     um_log "  - topgrade (language/user PMs)"
+  fi
+  if [[ "${UM_CAP[firmware_available]:-0}" -eq 1 ]]; then
+    um_log "  - firmware (report; installing asks first)"
   fi
   if [[ "${UM_APPLY}" -eq 1 ]]; then
     um_log "  - stability gate"
