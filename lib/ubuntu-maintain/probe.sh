@@ -75,6 +75,8 @@ um_probe_apt() {
     UM_CAP[apt_held_count]=0
   fi
 
+  um_probe_apt_obsolete
+
   UM_CAP[apt_upgrade_standard_cmd]="apt-get upgrade --with-new-pkgs -y"
   UM_CAP[apt_upgrade_aggressive_cmd]="apt-get dist-upgrade -y"
 
@@ -96,6 +98,22 @@ um_probe_apt() {
   fi
 
   return 0
+}
+
+# Installed packages that no configured repository provides any more: removed PPAs, manual
+# .deb installs, leftovers from older releases. Reported only, never removed: many are
+# deliberate installs. Search patterns need apt >= 2.0 (not on 18.04).
+um_probe_apt_obsolete() {
+  UM_CAP[apt_obsolete_count]="unknown"
+  UM_CAP[apt_obsolete_list]=""
+  local major out
+  major="${UM_CAP[apt_version]:-}"
+  major="${major#apt }"
+  major="${major%%.*}"
+  [[ "$major" =~ ^[0-9]+$ && "$major" -ge 2 ]] || return 0
+  out="$(LC_ALL=C apt list '?obsolete' 2>/dev/null)" || return 0
+  UM_CAP[apt_obsolete_list]="$(awk -F/ '/\[installed/ {print $1}' <<<"$out" | paste -sd ' ')"
+  UM_CAP[apt_obsolete_count]="$(awk -F/ '/\[installed/' <<<"$out" | grep -c . || true)"
 }
 
 um_probe_needrestart() {

@@ -22,6 +22,14 @@ teardown() {
   rm -rf "$TEST_TMP"
 }
 
+# fake_bin NAME BODY: put an executable NAME (bash script BODY) first on PATH.
+fake_bin() {
+  mkdir -p "${TEST_TMP}/bin"
+  printf '#!/bin/bash\n%s\n' "$2" > "${TEST_TMP}/bin/$1"
+  chmod +x "${TEST_TMP}/bin/$1"
+  case ":${PATH}:" in *":${TEST_TMP}/bin:"*) ;; *) export PATH="${TEST_TMP}/bin:${PATH}" ;; esac
+}
+
 # Run the CLI with a throwaway log instead of the user's real /tmp/ubuntu-maintain.<uid>.log.
 um_cli() {
   run "${ROOT}/bin/ubuntu-maintain" --log-file "${TEST_TMP}/um.log" "$@"
@@ -884,4 +892,44 @@ fake_outdated_proc() {
   UM_ISSUES=("warning: held packages may block some upgrades" "warning: held packages may block some upgrades")
   run um_result_print 0
   [ "$(grep -c 'held packages' <<<"$output")" -eq 1 ]
+}
+
+# apt list '?obsolete' fake: records the locale and that it ran.
+fake_apt_obsolete() {
+  fake_bin apt 'touch "${TEST_TMP}/apt.called"; printf "%s" "${LC_ALL:-}" > "${TEST_TMP}/apt.lc_all"
+[[ "$*" == "list ?obsolete" ]] || exit 1
+echo "Listing..."
+echo "anydesk/now 6.2.0 amd64 [installed,local]"
+echo "g++-14/now 14.2.0-4 amd64 [installed,local]"'
+}
+
+@test "obsolete probe counts installed packages missing from every repository" {
+  fake_apt_obsolete
+  UM_CAP[apt_version]="apt 3.2.1 (amd64)"
+  um_probe_apt_obsolete
+  [ "${UM_CAP[apt_obsolete_count]}" = "2" ]
+  [ "${UM_CAP[apt_obsolete_list]}" = "anydesk g++-14" ]
+  [ "$(cat "${TEST_TMP}/apt.lc_all")" = "C" ]
+}
+
+@test "obsolete probe is unknown on apt older than 2.0 (no search patterns)" {
+  fake_apt_obsolete
+  UM_CAP[apt_version]="apt 1.6.17 (amd64)"
+  um_probe_apt_obsolete
+  [ "${UM_CAP[apt_obsolete_count]}" = "unknown" ]
+  [ ! -e "${TEST_TMP}/apt.called" ]
+}
+
+@test "obsolete probe is unknown when apt list fails" {
+  fake_bin apt 'exit 100'
+  UM_CAP[apt_version]="apt 3.2.1 (amd64)"
+  um_probe_apt_obsolete
+  [ "${UM_CAP[apt_obsolete_count]}" = "unknown" ]
+  [ -z "${UM_CAP[apt_obsolete_list]}" ]
+}
+
+@test "manifest shows obsolete_packages" {
+  { UM_CAP[manifest_timestamp]="test"; UM_CAP[apt_available]=1; UM_CAP[apt_obsolete_count]=3; }
+  run um_manifest_print
+  [[ "$output" == *"  obsolete_packages: 3"* ]]
 }

@@ -22,6 +22,7 @@ um_manifest_print() {
   um_log "  lock_wait: ${UM_CAP[lock_wait_mode]:-n/a}"
   um_log "  locks_held: ${UM_CAP[apt_locks_held]:-none}"
   um_log "  held_packages: ${UM_CAP[apt_held_count]:-0}"
+  um_log "  obsolete_packages: ${UM_CAP[apt_obsolete_count]:-unknown}"
 
   um_log ""
   um_log "snap:"
