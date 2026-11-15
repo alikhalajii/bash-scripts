@@ -4,7 +4,7 @@
 # Provides: um_docker_cmd (the only way to call docker), um_docker_bin, um_docker_sock,
 #           um_docker_size_bytes, um_docker_fmt_size, um_docker_safe_text, um_docker_json_str,
 #           um_docker_parse_pick, um_probe_docker, um_docker_collect (fills UM_DK_*),
-#           um_docker_render
+#           um_docker_render, um_docker_pick, um_docker_remove
 # Example:  um_docker_cmd version --format '{{.Server.Version}}'
 # Sourced by: common.sh → um_source_libs
 
@@ -192,7 +192,7 @@ um_docker_json_str() {
 # zero. Otherwise prints the first token that is not understood and returns 1.
 um_docker_parse_pick() {
   local input="$1" n="$2" tok lo hi i out=""
-  local -a toks=() picked=()
+  local -a toks=() marks=()
   IFS=$' \t,' read -r -a toks <<<"$input"
   for tok in "${toks[@]}"; do
     [[ -n "$tok" ]] || continue
@@ -200,14 +200,14 @@ um_docker_parse_pick() {
       lo=$((10#${BASH_REMATCH[1]})) hi="${BASH_REMATCH[3]:-${BASH_REMATCH[1]}}"
       hi=$((10#$hi))
       if (( lo <= hi && hi <= n )); then
-        for (( i = lo; i <= hi; i++ )); do picked[i]=1; done
+        for (( i = lo; i <= hi; i++ )); do marks[i]=1; done
         continue
       fi
     fi
     printf '%s\n' "$tok"
     return 1
   done
-  for i in "${!picked[@]}"; do out+="${out:+ }$i"; done
+  for i in "${!marks[@]}"; do out+="${out:+ }$i"; done
   printf '%s\n' "$out"
 }
 
@@ -549,4 +549,148 @@ um_docker_render() {
     for (( i = 1; i <= ${#UM_DK_VOLUMES[@]} && i <= 5; i++ )); do um_log "${UM_DK_VOLUMES[i]}"; done
     if [[ ${#UM_DK_VOLUMES[@]} -gt 5 ]]; then um_log "  ... (+$(( ${#UM_DK_VOLUMES[@]} - 5 )) more)"; fi
   fi
+}
+
+# Ask which items to remove (terminal; um_tty_read_line), then confirm the picked lines in
+# full. An image is dropped unless every stopped container it needs is picked too. Sets
+# UM_DK_PICKED (item numbers, ascending). Returns 0 only after a final y/Y.
+um_docker_pick() {
+  local n="${#UM_DK_KIND[@]}" ans="" picked="" try i c bytes=0 how="at least"
+  local -A sel=()
+  UM_DK_PICKED=()
+  [[ "$n" -gt 0 ]] || return 1
+  for try in 1 2; do
+    if ! um_tty_read_line "Remove which? Numbers like 1 3 or 2-4, Enter = none: " ans; then
+      um_log "No answer; nothing removed."
+      return 1
+    fi
+    picked="$(um_docker_parse_pick "$ans" "$n")" && break
+    picked="$(um_docker_safe_text "$picked" 20)"
+    if [[ "$try" -eq 1 ]]; then
+      um_log "  not understood: ${picked} (choose 1-${n}); try once more"
+    else
+      um_log "  not understood: ${picked}; nothing removed."
+      return 1
+    fi
+  done
+  for i in $picked; do sel[$i]=1; done
+  for i in $picked; do
+    for c in ${UM_DK_NEEDS[i]}; do
+      if [[ ! -v sel[$c] ]]; then
+        um_log "  skipped ${i}: container ${c} was not picked"
+        unset "sel[$i]"
+        break
+      fi
+    done
+  done
+  for i in $picked; do
+    [[ -v sel[$i] ]] || continue
+    UM_DK_PICKED+=("$i")
+    bytes=$((bytes + ${UM_DK_BYTES[i]:-0}))
+  done
+  if [[ ${#UM_DK_PICKED[@]} -eq 0 ]]; then
+    um_log "Nothing removed."
+    return 1
+  fi
+  for i in "${UM_DK_PICKED[@]}"; do um_log "$(um_docker_item_line "$i" full)"; done
+  [[ "${UM_DK_ABOUT:-0}" -eq 1 ]] && how="about"
+  if ! um_tty_read_line "Remove ${#UM_DK_PICKED[@]} item(s), ${how} $(um_docker_fmt_size "$bytes")? [y/N] " ans; then
+    um_log "No answer; nothing removed."
+    return 1
+  fi
+  if [[ "$ans" != [yY] ]]; then
+    um_log "Nothing removed."
+    return 1
+  fi
+}
+
+# um_docker_remove_container I: remove a stopped container by full ID, only if it is still
+# stopped and has not run since the list. Returns 0 if removed.
+um_docker_remove_container() {
+  local i="$1" id="${UM_DK_ID[$1]}" name="${UM_DK_NAME[$1]}" out err st sa fa
+  if ! out="$(um_docker_cmd container inspect --format "$UM_DK_FMT_RECHECK" -- "$id" 2>/dev/null)"; then
+    um_log "warning: Docker: ${name} is gone; skipped"
+    return 1
+  fi
+  IFS="$UM_DK_SEP" read -r st sa fa <<<"$out"
+  case "$st" in exited | created | dead) ;; *) sa="changed" ;; esac
+  if [[ "$sa" != "${UM_DK_STARTED[i]}" || "$fa" != "${UM_DK_FINISHED[i]}" ]]; then
+    um_log "warning: Docker: ${name} changed since the list; not removed"
+    return 1
+  fi
+  if ! err="$(um_docker_cmd container rm -- "$id" 2>&1 >/dev/null)"; then
+    um_log "warning: Docker: could not remove ${name}: ${err}"
+    return 1
+  fi
+}
+
+# um_docker_remove_image I: check first that every listed tag still names this image and
+# that it has no new tag; then untag all but the last tag by name and remove the image by ID
+# (Docker refuses if a container or another tag appeared meanwhile). Returns 0 if removed.
+um_docker_remove_image() {
+  local i="$1" id="${UM_DK_ID[$1]}" name="${UM_DK_NAME[$1]}" t cur err n
+  local -a tags=()
+  read -r -a tags <<<"${UM_DK_TAGS[i]}"
+  for t in "${tags[@]}"; do
+    cur="$(um_docker_cmd image inspect --format "$UM_DK_FMT_IMGID" -- "$t" 2>/dev/null)" || cur=""
+    if [[ "$cur" != "$id" ]]; then
+      um_log "warning: Docker: ${t} now points to another image; not removed"
+      return 1
+    fi
+  done
+  if ! n="$(um_docker_cmd image inspect --format "$UM_DK_FMT_NTAGS" -- "$id" 2>/dev/null)"; then
+    um_log "warning: Docker: ${name} is gone; skipped"
+    return 1
+  fi
+  if [[ "$n" != "${#tags[@]}" ]]; then
+    um_log "warning: Docker: ${name} changed since the list; not removed"
+    return 1
+  fi
+  for t in "${tags[@]:0:${#tags[@]}-1}"; do
+    if ! err="$(um_docker_cmd image rm -- "$t" 2>&1 >/dev/null)"; then
+      um_log "warning: Docker: could not remove ${name}: ${err}"
+      return 1
+    fi
+  done
+  if ! err="$(um_docker_cmd image rm -- "$id" 2>&1 >/dev/null)"; then
+    um_log "warning: Docker: could not remove ${name}: ${err}"
+    return 1
+  fi
+}
+
+# Remove the picked items (UM_DK_PICKED, after um_docker_pick): containers, then images
+# (only if every container they need was removed), then the build cache. Logs each result
+# and a summary; a refusal is a warning. Returns 0.
+um_docker_remove() {
+  local kind i ok r=0 freed=0 size how="at least"
+  local -A gone=()
+  for kind in container image cache; do
+    for i in "${UM_DK_PICKED[@]}"; do
+      [[ "${UM_DK_KIND[i]}" == "$kind" ]] || continue
+      ok=0
+      case "$kind" in
+        container) um_docker_remove_container "$i" && ok=1 && gone[$i]=1 ;;
+        image)
+          local c need_ok=1
+          for c in ${UM_DK_NEEDS[i]}; do [[ -v gone[$c] ]] || need_ok=0; done
+          if [[ "$need_ok" -eq 0 ]]; then
+            um_log "warning: Docker: ${UM_DK_NAME[i]} kept; its container was not removed"
+          else
+            um_docker_remove_image "$i" && ok=1
+          fi ;;
+        cache)
+          local err
+          if err="$(um_docker_cmd builder prune --all -f 2>&1 >/dev/null)"; then ok=1
+          else um_log "warning: Docker: could not remove the build cache: ${err}"; fi ;;
+      esac
+      [[ "$ok" -eq 1 ]] || continue
+      r=$((r + 1)) freed=$((freed + ${UM_DK_BYTES[i]:-0}))
+      size="size unknown"
+      [[ -z "${UM_DK_BYTES[i]}" ]] || size="$(um_docker_fmt_size "${UM_DK_BYTES[i]}")"
+      um_log "removed ${UM_DK_NAME[i]} (${size})"
+    done
+  done
+  [[ "${UM_DK_ABOUT:-0}" -eq 1 ]] && how="about"
+  um_log "Docker: removed ${r} of ${#UM_DK_PICKED[@]} item(s), ${how} $(um_docker_fmt_size "$freed") freed"
+  return 0
 }

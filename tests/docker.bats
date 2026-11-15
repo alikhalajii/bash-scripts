@@ -11,6 +11,8 @@ setup() {
   um_test_setup
   # shellcheck source=../lib/ubuntu-maintain/docker.sh
   source "${UM_LIB}/docker.sh"
+  # Terminal questions take their answers from the test's answers=(...) list.
+  um_tty_read_line() { answer_from_list "$@"; }
 }
 
 # A call the module must never make (force, volumes, system prune...) fails the test.
@@ -309,4 +311,164 @@ assert_readonly_calls() {
   fake_docker no-cache; collect; run um_docker_render
   [ "${lines[0]}" = "Docker: 6 item(s) can be removed, at least 672 MB." ]
   [[ "$output" != *"build cache"* ]]
+}
+
+# Answers for the picker, one per question; __eof__ (or running out) = no answer. The
+# question is printed so tests can check it.
+answers=()
+answer_from_list() {
+  local a="${answers[0]-__eof__}"
+  answers=("${answers[@]:1}")
+  printf '%s\n' "$1"
+  [[ "$a" == __eof__ ]] && return 1
+  printf -v "$2" '%s' "$a"
+}
+um_docker_pick_and_remove() { um_docker_pick && um_docker_remove; }
+state_has() { grep -q "$2" "${TEST_TMP}/dk/$1"; }
+
+@test "docker pick: picking 3 removes exactly item 3" {
+  fake_docker; collect; answers=(3 y)
+  um_docker_pick > /dev/null && um_docker_remove > /dev/null
+  [ "$(removal_calls)" = "image	rm	--	${UM_DK_ID[3]}" ]
+  run ! state_has images.tsv demo/big:3
+}
+
+@test "docker pick: n, Enter, no answer at either question remove nothing" {
+  local case
+  for case in "3 n" "3 N" "3 yes" "''" "3 __eof__" "__eof__"; do
+    fake_docker; collect; eval "answers=($case)"
+    run um_docker_pick_and_remove
+    [ "$status" -ne 0 ] && [[ "$output" == *"othing removed."* ]]
+    assert_readonly_calls
+  done
+}
+
+@test "docker pick: Enter says nothing was removed, no answer says so too" {
+  fake_docker; collect; answers=('')
+  run um_docker_pick_and_remove; [[ "$output" == *"Nothing removed."* ]]
+  answers=(__eof__)
+  run um_docker_pick_and_remove; [[ "$output" == *"No answer; nothing removed."* ]]
+}
+
+@test "docker pick: one retry after input that is not understood" {
+  fake_docker; collect; answers=(12 3 y); run um_docker_pick_and_remove
+  [[ "$output" == *"not understood: 12 (choose 1-7); try once more"* ]]
+  [ "$(removal_calls | wc -l)" -eq 1 ]
+}
+
+@test "docker pick: two bad answers remove nothing" {
+  fake_docker; collect; answers=(12 $'x\e[2J' y); run um_docker_pick_and_remove
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not understood: x?[2J; nothing removed."* ]]
+  assert_readonly_calls
+}
+
+@test "docker pick: image without all its containers is skipped" {
+  fake_docker; collect; answers=("2 4" y); run um_docker_pick_and_remove
+  [[ "$output" == *"skipped 4: container 1 was not picked"* ]]
+  [ "$(removal_calls | grep -c $'^image')" -eq 0 ]
+  [ "$(removal_calls)" = "container	rm	--	${UM_DK_ID[2]}" ]
+}
+
+@test "docker pick: image with its containers is removed after them" {
+  fake_docker; collect; answers=("4 2 1" y); run um_docker_pick_and_remove
+  [ "$(removal_calls)" = "container	rm	--	${UM_DK_ID[1]}
+container	rm	--	${UM_DK_ID[2]}
+image	rm	--	${UM_DK_ID[4]}" ]
+  [[ "$output" == *"Docker: removed 3 of 3 item(s), at least 222 MB freed"* ]]
+}
+
+@test "docker pick: confirm line lists every picked item and the total" {
+  fake_docker; collect; answers=("3,5" y); run um_docker_pick_and_remove
+  [[ "$output" == *"  3  300 MB  2025-04-08  demo/big:3"*"  5  100 MB  unknown     demo/base:1, demo/base:latest"*"Remove 2 item(s), at least 400 MB? [y/N] "* ]]
+}
+
+@test "docker pick: confirm repeats long names in full" {
+  fake_docker; collect; UM_DK_NAME[3]="demo/$(printf 'x%.0s' {1..90}):3"; answers=(3 n)
+  run um_docker_pick_and_remove
+  [[ "$output" == *"${UM_DK_NAME[3]}"* ]]
+}
+
+@test "docker remove: shared-ID image untags by name then removes by ID" {
+  fake_docker; collect; answers=(5 y); run um_docker_pick_and_remove
+  [ "$(removal_calls)" = "image	rm	--	demo/base:1
+image	rm	--	${UM_DK_ID[5]}" ]
+  run ! state_has images.tsv "${UM_DK_ID[5]}"
+}
+
+@test "docker remove: moved tag is skipped, image kept" {
+  fake_docker; collect; answers=(5 y)
+  local new
+  new="sha256:$(printf 'e7%.0s' {1..32})"
+  sed -i 's|demo/base:1,demo/base:latest|demo/base:latest|' "$TEST_TMP/dk/images.tsv"
+  printf '%s\t5MB\t2026-11-10 10:00:00 +0000 UTC\tdemo/base:1\n' "$new" >> "$TEST_TMP/dk/images.tsv"
+  run um_docker_pick_and_remove
+  [[ "$output" == *"warning: Docker: demo/base:1 now points to another image; not removed"* ]]
+  assert_readonly_calls
+  state_has images.tsv "${UM_DK_ID[5]}" && state_has images.tsv "$new"
+}
+
+@test "docker remove: a tag added since the list keeps the image" {
+  fake_docker; collect; answers=(6 y)
+  sed -i "s|^\(${UM_DK_ID[6]}.*\)\t-$|\1\tdemo/new:1|" "$TEST_TMP/dk/images.tsv"
+  run um_docker_pick_and_remove
+  [[ "$output" == *"warning: Docker: <none> 0e0e0e0e0e0e changed since the list; not removed"* ]]
+  assert_readonly_calls
+}
+
+@test "docker remove: restarted container is not removed" {
+  fake_docker; collect; answers=(2 y)
+  sed -i 's|2026-05-01T08:00:00.5Z|2026-11-15T08:00:00Z|' "$TEST_TMP/dk/containers.tsv"
+  run um_docker_pick_and_remove
+  [[ "$output" == *"warning: Docker: old-db [compose shop] changed since the list; not removed"* ]]
+  assert_readonly_calls
+}
+
+@test "docker remove: a container running again is not removed" {
+  fake_docker; collect; answers=(2 y)
+  sed -i 's|\texited\t|\trunning\t|' "$TEST_TMP/dk/containers.tsv"
+  run um_docker_pick_and_remove
+  [[ "$output" == *"changed since the list; not removed"* ]]
+  assert_readonly_calls
+}
+
+@test "docker remove: vanished container is skipped and its image kept" {
+  fake_docker; collect; answers=("1 2 4" y)
+  sed -i "/^${UM_DK_ID[1]}/d" "$TEST_TMP/dk/containers.tsv"
+  run um_docker_pick_and_remove
+  [[ "$output" == *"warning: Docker: old-web is gone; skipped"* ]]
+  [[ "$output" == *"warning: Docker: demo/db:2 kept; its container was not removed"* ]]
+  [ "$(removal_calls)" = "container	rm	--	${UM_DK_ID[2]}" ]
+}
+
+@test "docker remove: failed container keeps its image" {
+  fake_docker; collect; answers=("1 2 4" y); touch "$TEST_TMP/dk/fail-container-rm"
+  run um_docker_pick_and_remove
+  [[ "$output" == *"warning: Docker: could not remove old-web: Error response from daemon: injected failure"* ]]
+  [[ "$output" == *"demo/db:2 kept; its container was not removed"* ]]
+  [ "$(removal_calls | grep -c $'^image')" -eq 0 ]
+}
+
+@test "docker remove: build cache pruned only when picked" {
+  fake_docker; collect; answers=(3 y); run um_docker_pick_and_remove
+  run ! grep -q $'^builder' "$TEST_TMP/dk/calls"
+  fake_docker; collect; answers=(7 y); run um_docker_pick_and_remove
+  [ "$(removal_calls)" = "builder	prune	--all	-f" ]
+  [[ "$output" == *"removed build cache (incl. build-mount caches) (1.4 GB)"* ]]
+}
+
+@test "docker remove: total counts only successful removals" {
+  fake_docker; collect; answers=("1-4" y); touch "$TEST_TMP/dk/fail-container-rm"
+  run um_docker_pick_and_remove
+  [[ "$output" == *"removed demo/big:3 (300 MB)"* ]]
+  [[ "$output" == *"Docker: removed 1 of 4 item(s), at least 300 MB freed"* ]]
+}
+
+@test "docker remove: everything picked leaves only what is kept; never force, never volumes" {
+  fake_docker; collect; answers=(1-7 y); run um_docker_pick_and_remove
+  [[ "$output" == *"Docker: removed 7 of 7 item(s), at least 2.1 GB freed"* ]]
+  [ "$(cut -f4 "$TEST_TMP/dk/images.tsv")" = demo/app:1 ]
+  [ "$(wc -l < "$TEST_TMP/dk/containers.tsv")" -eq 1 ]
+  [ "$(wc -l < "$TEST_TMP/dk/volumes.tsv")" -eq 3 ]
+  run ! grep -E $'\t(-f|--force|-v|--volumes)(\t|$)' <(grep -v $'^builder' "$TEST_TMP/dk/calls")
 }
