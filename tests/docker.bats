@@ -268,7 +268,8 @@ exit 0"
 
 @test "docker collect: hostile name neutralized, malformed record dropped" {
   fake_docker hostile; UM_MODE=monthly um_docker_collect > "$TEST_TMP/out"
-  grep -q 'warning: Docker: skipped an unreadable record' "$TEST_TMP/out"
+  [ ! -s "$TEST_TMP/out" ]
+  [ "$UM_DK_BAD" -eq 1 ]
   [[ "${UM_DK_NAME[*]}" != *$'\e'* && "${UM_DK_NAME[*]}" != *$'\x1f'* ]]
   [[ "${UM_DK_NAME[*]}" == *'old?]0;x?db [compose shop?x]'* ]]
   # The malformed record uses demo/db:2: that image is withheld (fail closed).
@@ -280,8 +281,8 @@ exit 0"
   fake_docker
   sed -i 's|"/old-web"\t""\t""|"/old-web"\tnull\tnull|' "$TEST_TMP/dk/containers.tsv"
   grep -q 'old-web"	null	null' "$TEST_TMP/dk/containers.tsv"
-  UM_MODE=monthly um_docker_collect > "$TEST_TMP/out"
-  run ! grep -q warning "$TEST_TMP/out"
+  UM_MODE=monthly um_docker_collect > /dev/null
+  [ "$UM_DK_BAD" -eq 0 ]
   [ "${UM_DK_NAME[1]}" = old-web ]
   [ "${UM_DK_NEEDS[4]}" = "1 2" ]
 }
@@ -593,6 +594,16 @@ image	rm	--	${UM_DK_ID[5]}" ]
     [[ "$output" != *"free Docker space"* ]]
     assert_readonly_calls
   done
+}
+
+@test "docker phase: unreadable records are one warning inside the section, also under apply" {
+  fake_docker hostile; export UM_MODE=monthly UM_APPLY=1
+  um_probe_docker > "$TEST_TMP/probe.out"
+  [ ! -s "$TEST_TMP/probe.out" ]
+  um_have_tty() { return 1; }
+  run um_docker_phase
+  [ "$(grep -c '^warning: Docker:' <<<"$output")" -eq 1 ]
+  [[ "$output" == *"=== Docker ==="*"warning: Docker: 1 record(s) could not be read; those items are not listed"* ]]
 }
 
 @test "docker phase: not running prints the skipped line" {

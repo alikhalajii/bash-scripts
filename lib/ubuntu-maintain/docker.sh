@@ -311,7 +311,7 @@ um_docker_reset() {
   declare -ga UM_DK_KIND=() UM_DK_ID=() UM_DK_BYTES=() UM_DK_DATE=() UM_DK_NAME=() \
     UM_DK_NOTE=() UM_DK_FROM=() UM_DK_NEEDS=() UM_DK_TAGS=() UM_DK_STARTED=() \
     UM_DK_FINISHED=() UM_DK_VOLUMES=() UM_DK_PICKED=()
-  declare -g UM_DK_KEPT="" UM_DK_VOLTOTAL="" UM_DK_ABOUT=0 UM_DK_TOTAL=0
+  declare -g UM_DK_KEPT="" UM_DK_VOLTOTAL="" UM_DK_ABOUT=0 UM_DK_TOTAL=0 UM_DK_BAD=0
 }
 
 # Read everything the list needs into files in DIR. Both `system df` calls walk every
@@ -339,13 +339,15 @@ um_docker_read_containers() {
     || um_docker_cmd container inspect --format "$UM_DK_FMT_CT" -- "${ids[@]}" > "$d/ct" 2> "$d/err"
 }
 
-um_docker_bad_record() { um_log "warning: Docker: skipped an unreadable record"; }
+# Count a record that failed validation; um_docker_phase reports the count once.
+um_docker_bad_record() { UM_DK_BAD=$((UM_DK_BAD + 1)); }
 
 # Fill the UM_DK_* lists from the daemon (read-only): stopped containers (oldest stop
 # first), images no running container uses (largest first), then the build cache; plus
 # UM_DK_KEPT, UM_DK_VOLUMES (lines, largest first), UM_DK_VOLTOTAL, UM_DK_ABOUT (1 = sizes
 # approximate: containerd image store) and UM_DK_TOTAL (known bytes of all items). Every
-# field is validated; a record that fails is skipped with a warning. Returns 1 if a docker
+# field is validated; a record that fails is skipped and counted in UM_DK_BAD (prints
+# nothing, so it can run during the probes). Returns 1 if a docker
 # call fails: the lists stay empty and UM_CAP[docker_note] says why.
 um_docker_collect() {
   local d err="" line k id n b i j name proj tag repo vb vt=0 kept_n=0 kept_b=0
@@ -748,6 +750,9 @@ um_docker_phase() {
   if [[ "${UM_APPLY}" -eq 1 ]] && ! um_docker_collect; then
     um_log "note: ${UM_CAP[docker_note]}"
     return 0
+  fi
+  if [[ "${UM_DK_BAD:-0}" -gt 0 ]]; then
+    um_log "warning: Docker: ${UM_DK_BAD} record(s) could not be read; those items are not listed"
   fi
   um_docker_render
   n="${#UM_DK_KIND[@]}"

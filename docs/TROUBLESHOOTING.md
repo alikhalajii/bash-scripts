@@ -126,7 +126,7 @@ Warnings after you answered `y` (that item was not removed; run again to see the
 - **`... changed since the list; not removed`**, **`... now points to another image; not removed`**, **`... is gone; skipped`:** the container or image changed between the list and your answer, for example a container was started or a tag was pulled again.
 - **`... kept; its container was not removed`:** the image needs a stopped container that was not removed, so Docker would refuse it.
 - **`could not remove ...: <Docker's message>`:** Docker refused, usually because a container uses the image.
-- **`warning: Docker: skipped an unreadable record`:** Docker printed something unexpected for one item; that item is left out of the list.
+- **`warning: Docker: N record(s) could not be read; those items are not listed`:** Docker printed something unexpected for those items. They are left out, and so is any image such a container uses.
 
 ## Services restarted after updates (Ubuntu 24.04+)
 
