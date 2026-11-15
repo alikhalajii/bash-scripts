@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# firmware.sh — Report firmware updates (fwupd); install only after a y on a terminal.
-# Provides: um_firmware_phase
+# firmware.sh — Firmware phase (fwupd): report updates; install only after a y on a terminal.
+# Provides: um_firmware_phase, um_fw_confirm, um_have_tty, um_fw_can_install
+# Example:  um_firmware_phase || rc=$?    # 0, or UM_EXIT_FIRMWARE (14) if an install failed
 # Sourced by: common.sh → um_source_libs
 
 # Declared in common.sh; repeated here so shellcheck can infer the associative-array type.
@@ -37,6 +38,8 @@ um_fw_confirm() {
   [[ "$answer" == [yY] ]]
 }
 
+# Dry run: list pending updates. --apply: refresh metadata, list, ask (terminal only), install.
+# Sets UM_CAP[firmware_pending] or [firmware_installed]. Returns 0 or UM_EXIT_FIRMWARE.
 um_firmware_phase() {
   [[ "${UM_CAP[firmware_available]:-0}" -eq 1 ]] || return 0
   um_section "Firmware"

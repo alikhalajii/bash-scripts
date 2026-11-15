@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
-# topgrade.sh — Optional Topgrade pass for pip/cargo/npm (topgrade's own system/snap/flatpak steps disabled).
+# topgrade.sh — Topgrade phase (--with-topgrade): user-level tools (pip, cargo, npm, ...) as the
+#           invoking user; topgrade's own system/snap/flatpak steps are disabled.
 # Provides: um_topgrade_phase, um_topgrade_disable_args
+# Example:  um_topgrade_phase || rc=$?    # 0, or UM_EXIT_TOPGRADE (13)
 # Sourced by: common.sh → um_source_libs
 
+# topgrade --disable arguments for the steps this tool runs itself.
 um_topgrade_disable_args() {
   # Disable the system package managers already handled. topgrade has no "apt" step
   # (unknown step names are rejected and topgrade exits); apt runs inside "system".
   printf '%s\n' --disable system --disable snap --disable flatpak
 }
 
+# Runs topgrade as SUDO_USER. Returns 0, or UM_EXIT_TOPGRADE on failure.
 um_topgrade_phase() {
   [[ "${UM_WITH_TOPGRADE}" -eq 1 ]] || return 0
   if [[ "${UM_CAP[topgrade_available]:-0}" -ne 1 ]]; then

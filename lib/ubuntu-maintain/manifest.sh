@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# manifest.sh — Print capability manifest and apt simulate summary.
-# Provides: um_manifest_print, um_manifest_apt_simulate_summary
+# manifest.sh — Print the capability manifest, planned phases and the apt simulate summary.
+# Provides: um_manifest_print, um_manifest_planned_phases, um_manifest_apt_simulate_summary
+# Example:  um_run_probes && um_manifest_print
 # Sourced by: common.sh → um_source_libs
 
 # Declared in common.sh; repeated here so shellcheck can infer the associative-array type.
@@ -72,6 +73,7 @@ um_manifest_print() {
   um_manifest_planned_phases
 }
 
+# The phases this run will execute, from UM_CAP and the flags.
 um_manifest_planned_phases() {
   if [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]]; then
     um_log "  - apt (${UM_CAP[apt_tier_selected]})"
@@ -105,12 +107,15 @@ um_manifest_planned_phases() {
   fi
 }
 
+# Number of "Remv" lines in apt-get -s output.
 um_manifest_count_apt_removals() {
   local sim="$1"
   # apt-get -s uses Inst/Remv/Conf prefixes
   echo "$sim" | grep -cE '^Remv ' || true
 }
 
+# Simulate the upgrade and log packages_to_remove. Returns UM_EXIT_APT if the simulation
+# fails under --apply; a dry run only warns.
 um_manifest_apt_simulate_summary() {
   local sim held_changes removals sim_rc=0
   sim="$(um_apt_simulate_upgrade 2>&1)" || sim_rc=$?

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# summary.sh — Capture pre/post PM snapshots and print a structured apply summary.
+# summary.sh — Before/after package snapshots, the Update Summary, and the final Result block.
 # Provides: um_summary_init, um_summary_snapshot, um_summary_print, um_result_print
+# Example:  um_summary_snapshot pre; ...; um_summary_snapshot post; um_summary_print
 # Sourced by: common.sh → um_source_libs
 
 # Declared in common.sh; repeated here so shellcheck can infer the associative-array type.
@@ -8,12 +9,14 @@ declare -gA UM_CAP
 
 UM_SUMMARY_DIR=""
 
+# Create the snapshot directory (removed on exit).
 um_summary_init() {
   UM_SUMMARY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ubuntu-maintain-summary.XXXXXX")"
   # shellcheck disable=SC2064
   trap "rm -rf '${UM_SUMMARY_DIR}'" EXIT
 }
 
+# um_summary_snapshot pre|post: record "name version" per apt/snap/flatpak package.
 um_summary_snapshot() {
   local label="$1"
   [[ -n "$UM_SUMMARY_DIR" ]] || return 0
@@ -84,6 +87,7 @@ _um_diff_apt() {
   ' "$after" "$before"
 }
 
+# Print installed/upgraded/removed counts per package manager from the two snapshots.
 um_summary_print() {
   [[ -n "$UM_SUMMARY_DIR" ]] || return 0
 

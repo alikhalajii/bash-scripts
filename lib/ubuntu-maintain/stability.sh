@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# stability.sh — Post-apply health gate (failed units, reboot, needrestart, dpkg).
+# stability.sh — Post-apply health gate: dpkg state, reboot need, failed units, needrestart.
 # Provides: um_stability_gate
+# Example:  um_stability_gate || rc=$?    # 0, or UM_EXIT_STABILITY (2); reasons in UM_CAP[stability_issues]
 # Sourced by: common.sh → um_source_libs
 
+# Returns 0, or UM_EXIT_STABILITY unless --ignore-stability; sets UM_CAP[stability_issues].
 um_stability_gate() {
   um_section "Stability gate"
   local rc=0

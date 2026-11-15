@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# dag.sh — Orchestrate probes → manifest → apt → snap → flatpak → journal → topgrade → firmware → stability.
+# dag.sh — Run the phases in order and turn their results into one exit code:
+#           probes → manifest → apt → snap → flatpak → journal → topgrade → firmware → gate.
 # Provides: um_run_dag
+# Example:  um_run_dag || um_rc=$?        # see --help for the exit codes
 # Sourced by: common.sh → um_source_libs
 
+# Returns the first phase failure code, else the stability gate result (0 or 2).
 um_run_dag() {
   local exit_code=0
   local apt_rc=0 snap_rc=0 flatpak_rc=0 stab_rc=0 topgrade_rc=0 firmware_rc=0

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# apt_module.sh — APT lock wait, upgrade tiers, simulate, and apply phase.
-# Provides: um_apt_phase, um_apt_run, um_apt_simulate_upgrade
+# apt_module.sh — APT phase: lock wait, update, upgrade tier, monthly cleanup with preview.
+# Provides: um_apt_phase, um_apt_run, um_apt_simulate_upgrade, um_apt_cleanup_preview,
+#           um_apt_autoremove_guarded, um_list_head, um_pkgs_size_mb
+# Example:  um_apt_phase || rc=$?          # 0, or UM_EXIT_APT (10) on failure
 # Sourced by: common.sh → um_source_libs
 
+# apt -o options for the native dpkg lock wait (apt >= 1.9.11); nothing on older apt.
 um_apt_lock_opts() {
   if [[ "${UM_CAP[apt_lock_timeout_supported]:-0}" -eq 1 ]]; then
     # One word per line: callers mapfile this into argv.
@@ -10,6 +13,7 @@ um_apt_lock_opts() {
   fi
 }
 
+# Export the non-interactive environment for apt and needrestart (--restart-services: mode a).
 um_apt_env() {
   export DEBIAN_FRONTEND=noninteractive
   if [[ "${UM_RESTART_SERVICES}" -eq 1 ]]; then
@@ -21,6 +25,9 @@ um_apt_env() {
   fi
 }
 
+# 18.04 (no native apt lock wait): poll until other apt/dpkg users finish, up to
+# UM_CAP[apt_lock_timeout] seconds. Newer apt waits by itself, so this returns at once.
+# Returns 0, or UM_EXIT_APT on timeout.
 um_apt_wait_locks() {
   if [[ "${UM_CAP[lock_wait_mode]:-}" == "fuser_poll" ]]; then
     um_log "Waiting for APT locks (fuser poll)..."
@@ -83,6 +90,7 @@ um_apt_update() {
   done
 }
 
+# apt-get arguments for the selected tier, one per line (standard: upgrade --with-new-pkgs).
 um_apt_upgrade_args() {
   local -a args
   case "${UM_CAP[apt_tier_selected]:-standard}" in
@@ -94,12 +102,14 @@ um_apt_upgrade_args() {
   printf '%s\n' "${args[@]}"
 }
 
+# Simulate the upgrade (no root, no changes); apt's "WARNING: unstable CLI" lines removed.
 um_apt_simulate_upgrade() {
   local -a upgrade_args
   mapfile -t upgrade_args < <(um_apt_upgrade_args)
   um_apt_run -s "${upgrade_args[@]}" 2>&1 | sed '/^WARNING: /d'
 }
 
+# Run the upgrade for the selected tier.
 um_apt_apply_upgrade() {
   local -a upgrade_args
   mapfile -t upgrade_args < <(um_apt_upgrade_args)
@@ -181,6 +191,8 @@ um_apt_autoremove_guarded() {
   um_apt_run autoremove --purge -y || return "${UM_EXIT_APT}"
 }
 
+# APT phase. Dry run: print the plan (and the cleanup preview when monthly). --apply: wait
+# for locks, update, re-simulate, upgrade, then monthly cleanup. Returns 0 or UM_EXIT_APT.
 um_apt_phase() {
   [[ "${UM_CAP[apt_available]:-0}" -eq 1 ]] || return 0
 

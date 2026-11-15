@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# snap.sh — Snap refresh and optional monthly revision cleanup.
-# Provides: um_snap_phase
+# snap.sh — Snap phase: refresh; monthly, remove disabled revisions and the download cache.
+# Provides: um_snap_phase, um_snap_disabled_revisions
+# Example:  um_snap_phase || rc=$?        # 0, or UM_EXIT_SNAP (11)
 # Sourced by: common.sh → um_source_libs
 
+# Print pending snap refreshes (informational; never fails).
 um_snap_preflight_list() {
   LANG=C snap refresh --list 2>/dev/null || true
 }
@@ -12,6 +14,8 @@ um_snap_disabled_revisions() {
   LC_ALL=C snap list --all 2>/dev/null | awk 'NR>1 && $NF ~ /(^|,)disabled(,|$)/ {print $1, $3}' || true
 }
 
+# Dry run: print the plan. --apply: refresh; monthly, remove disabled revisions and the
+# download cache. Returns 0 or UM_EXIT_SNAP.
 um_snap_phase() {
   [[ "${UM_CAP[snap_has_packages]:-0}" -eq 1 ]] || return 0
 

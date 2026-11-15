@@ -42,6 +42,13 @@ pre-commit run --all-files --hook-stage pre-push    # test suite
 
 prettier may rewrite a file and fail the commit: review the change, `git add` it, and commit again.
 
-To run `tests/run-tests.sh` directly instead, put bats on your PATH (`sudo apt install bats`).
+To run `tests/run-tests.sh` directly instead, put bats 1.5 or newer on your PATH (`sudo apt install bats` on 24.04+; 22.04 ships 1.2).
 
-The tests do not need root and do not change the system. Their logs and temporary files go to a per-test directory that is removed afterwards, and `/boot` and `/proc` are replaced by empty test folders.
+The tests do not need root and do not change the system. Their logs and temporary files go to a per-test directory that is removed afterwards, and `/boot` and `/proc` are replaced by empty test folders. `fwupdmgr` is replaced by a stub, so no test talks to the firmware daemon.
+
+To repeat CI's container check locally (needs Docker; `--apply` changes only the throwaway container):
+
+```bash
+docker run --rm -v "$PWD":/r:ro debian:13 bash -c 'cp -r /r /x && chown -R root:root /x && chmod -R go-w /x && cd /x &&
+  apt-get update -qq && ./bin/ubuntu-maintain --apply --mode monthly --ignore-stability'
+```

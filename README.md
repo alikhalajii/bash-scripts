@@ -2,7 +2,7 @@
 
 Safe, probe-driven system updates for Ubuntu and Debian.
 
-`ubuntu-maintain` detects what is installed (apt, snap, flatpak, optionally topgrade), prints a manifest of what it found and what it plans to do, and **changes nothing unless you pass `--apply`**. After an apply run it checks system health and prints a summary of every package installed, upgraded, or removed. Every dry run and update run ends with a short **Result**: what happened, the exit code, the warnings it logged, and the log path.
+`ubuntu-maintain` detects what is installed (apt, snap, flatpak, fwupd, optionally topgrade), prints a manifest of what it found and what it plans to do, and **changes nothing unless you pass `--apply`**. After an apply run it checks system health and prints a summary of every package installed, upgraded, or removed. Every dry run and update run ends with a short **Result**: what happened, the exit code, the warnings it logged, and the log path.
 
 ## Install
 
@@ -48,6 +48,7 @@ Phases run in this order; each one is skipped if its tool is missing or has noth
 
 ```bash
 ubuntu-maintain --apply                    # routine update
+ubuntu-maintain --mode monthly             # preview the cleanup; changes nothing
 ubuntu-maintain --apply --mode monthly     # update + cleanup (see below)
 ubuntu-maintain --apply --aggressive       # allow dist-upgrade, which may remove packages
 ubuntu-maintain --apply --with-topgrade    # also update user-level tools
@@ -95,6 +96,8 @@ Exit 2 is deliberate, so scheduled runs do not report an unhealthy system as gre
 
 - **Dry run by default.** Nothing changes without `--apply`.
 - **Never removes packages by default.** Routine runs use `apt-get upgrade --with-new-pkgs`: it installs new dependencies such as a new kernel, but never removes a package. An upgrade that needs a removal stays "kept back" until you run with `--aggressive` (`dist-upgrade`).
+- **Cleanup is opt-in, previewed and capped.** Only `--mode monthly` cleans up; its dry run lists what would go; an autoremove of more than 25 packages needs `--aggressive`; packages that no repository provides are never removed.
+- **Firmware needs your yes.** Firmware is installed only after a `y` on a terminal, never from a timer.
 - **No config prompts.** Upgrades keep locally modified config files (`--force-confdef --force-confold`, the same policy as unattended-upgrades) instead of stopping at a dpkg prompt.
 - **Waits for apt locks, never deletes them.** Works alongside `unattended-upgrades` and the `apt-daily` timers.
 - **Refuses tampered code.** As root, the tool will not run if any of its own files or folders can be written by other users. A dry run warns about it.

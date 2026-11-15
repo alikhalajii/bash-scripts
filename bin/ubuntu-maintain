@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# ubuntu-maintain — CLI entry: probe-driven Ubuntu/Debian maintenance (apt, snap, flatpak).
-# Run:     ./bin/ubuntu-maintain [--apply] [options]   (default: dry-run manifest)
-# Loads:   lib/ubuntu-maintain/* via common.sh
+# ubuntu-maintain — Safe, probe-driven maintenance for Ubuntu/Debian: apt, snap, flatpak,
+# monthly cleanup, firmware report. Dry run unless --apply; options and exit codes: --help.
+# Examples: ubuntu-maintain                          # dry run: manifest and plan
+#           ubuntu-maintain --mode monthly           # preview the monthly cleanup
+#           ubuntu-maintain --apply                  # routine update (asks for sudo once)
+# Loads:    lib/ubuntu-maintain/*.sh via common.sh
 set -Eeuo pipefail
 
 # Resolve symlinks so `ln -s .../bin/ubuntu-maintain ~/.local/bin/` still finds lib/.

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# common.sh — Shared flags, exit codes, CLI parsing, and library loader.
-# Provides: um_parse_args, um_log, um_die, um_source_libs, UM_CAP state
+# common.sh — Flags, exit codes, CLI parsing, logging and the library loader.
+# Provides: um_parse_args, um_log, um_section, um_die, um_sudo, um_setup_logging,
+#           um_source_libs, UM_CAP (shared state), UM_EXIT_* codes
+# Example:  um_log "warning: disk almost full"   # printed, and repeated in the Result block
 # Sourced by: bin/ubuntu-maintain (not executed directly)
 
 UM_VERSION="1.0.0"
@@ -82,6 +84,7 @@ um_reexec_as_root_if_apply() {
     "${UM_ROOT_DIR}/bin/ubuntu-maintain" "$@"
 }
 
+# Run a command as root: directly when already root, otherwise via sudo.
 um_sudo() {
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "$@"
@@ -99,6 +102,7 @@ um_load_os_release() {
   UM_CAP[os_pretty]="${PRETTY_NAME:-}"
 }
 
+# Major OS version as an integer (24 for "24.04"); 0 when unknown.
 um_parse_version_id() {
   local v="${UM_CAP[os_version_id]:-}"
   v="${v%%.*}"
@@ -197,6 +201,7 @@ um_claim_default_log() {
   ( set -o noclobber; umask 077; : > "$f" ) 2>/dev/null || true
 }
 
+# Send all further output to the terminal and the log (tee), choosing a safe log path.
 um_setup_logging() {
   local default_log
   default_log="/tmp/ubuntu-maintain.$(id -u).log"
@@ -224,6 +229,7 @@ um_setup_logging() {
   um_log "mode=${UM_MODE} apply=${UM_APPLY} aggressive=${UM_AGGRESSIVE}"
 }
 
+# Load every module; the order does not matter (functions are resolved when called).
 um_source_libs() {
   # shellcheck source=probe.sh
   source "${UM_LIB_DIR}/probe.sh"

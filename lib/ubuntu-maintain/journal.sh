@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# journal.sh — Monthly trim of archived systemd journal files to a size cap.
+# journal.sh — Journal phase (monthly): trim archived systemd journal files to 500M.
 # Provides: um_journal_phase, um_journal_usage_bytes
+# Example:  um_journal_phase              # always returns 0; a failed trim is a warning
 # Sourced by: common.sh → um_source_libs
 
 # journald's own default cap is up to 4G (10% of the filesystem). Size only, no age limit:
@@ -18,6 +19,7 @@ um_journal_usage_bytes() {
   }'
 }
 
+# Monthly only. Trims when usage is above UM_JOURNAL_CAP; always returns 0.
 um_journal_phase() {
   [[ "${UM_MODE}" == "monthly" ]] || return 0
   um_probe_command journalctl || return 0

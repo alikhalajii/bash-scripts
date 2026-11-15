@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# probe.sh — Detect OS, package managers, apt locks, and preflight health.
-# Provides: um_run_probes, um_probe_*  (writes results to UM_CAP[]),
-#           um_is_wsl, um_reboot_required_file, um_classify_failed_units, um_unit_expected_failure
+# probe.sh — Read-only detection: OS, package managers, apt locks, health, firmware.
+#           Results go to UM_CAP[]; nothing here changes the system.
+# Provides: um_run_probes, um_probe_*, um_fw_cmd, um_fw_parse_updates, um_is_wsl,
+#           um_reboot_required_file, um_classify_failed_units, um_unit_expected_failure
+# Example:  um_run_probes; echo "${UM_CAP[firmware_updates]}"
 # Sourced by: common.sh → um_source_libs
 
 # Declared in common.sh; repeated here so shellcheck can infer the associative-array type.
@@ -46,6 +48,7 @@ um_probe_apt_config_timeout() {
   fi
 }
 
+# Sets UM_CAP[apt_locks_held]: apt/dpkg lock files currently held (empty when free).
 um_probe_lock_holders() {
   local path holders=()
   for path in "${UM_APT_LOCK_PATHS[@]}"; do
@@ -58,6 +61,7 @@ um_probe_lock_holders() {
   UM_CAP[apt_locks_held]="${holders[*]:-}"
 }
 
+# Sets apt_available, apt_version, lock timeout/wait mode, held count, tier and upgrade_cmd.
 um_probe_apt() {
   if ! um_probe_command apt-get; then
     UM_CAP[apt_available]=0
@@ -162,6 +166,7 @@ um_probe_firmware() {
   return 0
 }
 
+# Sets needrestart_available, needrestart_version.
 um_probe_needrestart() {
   if um_probe_command needrestart; then
     UM_CAP[needrestart_available]=1
@@ -171,6 +176,7 @@ um_probe_needrestart() {
   fi
 }
 
+# Sets snap_available, snap_count, snap_has_packages.
 um_probe_snap() {
   UM_CAP[snap_available]=0
   UM_CAP[snap_has_packages]=0
@@ -188,6 +194,7 @@ um_probe_snap() {
   fi
 }
 
+# Sets flatpak_available, flatpak_version, flatpak_has_remotes (system remotes only).
 um_probe_flatpak() {
   UM_CAP[flatpak_available]=0
   UM_CAP[flatpak_has_remotes]=0
@@ -203,6 +210,7 @@ um_probe_flatpak() {
   fi
 }
 
+# Sets unattended_upgrades_active, apt_daily_active (shown in the manifest).
 um_probe_coexistence() {
   if um_probe_command systemctl; then
     UM_CAP[unattended_upgrades_active]="$(um_probe_unit_state unattended-upgrades)"
@@ -231,6 +239,7 @@ um_have_tpm_device() {
   compgen -G '/dev/tpm*' >/dev/null
 }
 
+# Path of the reboot flag written by package scripts (a function so tests can move it).
 um_reboot_required_file() {
   echo /var/run/reboot-required
 }
@@ -319,6 +328,7 @@ um_probe_restart_needs() {
   fi
 }
 
+# Sets reboot_required_preflight, failed_units_preflight, failed_units_expected_preflight.
 um_probe_health_preflight() {
   um_probe_restart_needs
   UM_CAP[reboot_required_preflight]=0
@@ -333,6 +343,7 @@ um_probe_health_preflight() {
   fi
 }
 
+# Sets topgrade_available, topgrade_version (looked up as the invoking user).
 um_probe_topgrade() {
   UM_CAP[topgrade_available]=0
   # Under --apply we are root with a fixed PATH, but topgrade runs as the invoking user,
@@ -351,6 +362,7 @@ um_probe_topgrade() {
   fi
 }
 
+# Sets eol_warning on Ubuntu releases past standard support (18.04, 20.04).
 um_probe_eol_warning() {
   local major
   major="$(um_parse_version_id)"
@@ -361,6 +373,7 @@ um_probe_eol_warning() {
   fi
 }
 
+# Run every probe; fills UM_CAP for the manifest and the phases.
 um_run_probes() {
   um_load_os_release
   um_probe_apt || true
