@@ -116,26 +116,36 @@ ubuntu-maintain ${UM_VERSION} — safe, probe-driven Ubuntu/Debian maintenance
 
 Usage: ubuntu-maintain [OPTIONS]
 
+Without --apply nothing is changed. Firmware updates (fwupd) are reported on
+every run and installed only after you answer y on a terminal, never from cron.
+
 Options:
-  --apply                 Execute updates (default is dry-run / manifest only)
-  --aggressive            Use apt dist-upgrade tier (may remove packages)
-  --mode daily|monthly    Hygiene depth (default: daily)
-  --manifest-only         Print manifest and exit
-  --with-topgrade         Also run topgrade for pip/cargo/npm/etc. as the invoking user
-                          (its system/snap/flatpak steps are disabled; this tool does those)
-  --continue-on-pm-failure  Continue if snap/flatpak/topgrade/firmware fails (apt failure always stops)
-  --ignore-stability      Do not exit 2 on failed units, pending reboot, or dpkg errors
-  --restart-services      Auto-restart services (needrestart mode a); risky
-  --log-file PATH         Log file (default: /tmp/ubuntu-maintain.<uid>.log)
-  -h, --help              Show this help
+  --apply                   Make changes (default: dry run)
+  --mode daily|monthly      daily (default): updates only; monthly: also clean
+                            up (autoremove, apt cache, leftover configs, old
+                            snap revisions, unused flatpak runtimes, journal
+                            over 500M), previewed by a dry run
+  --aggressive              Allow apt dist-upgrade and large autoremoves
+                            (over 25 packages); both may remove packages
+  --manifest-only           Print the manifest and exit
+  --with-topgrade           Also run topgrade (pip, cargo, npm, ...) as the
+                            invoking user; its system steps are disabled
+  --continue-on-pm-failure  Keep going if snap/flatpak/topgrade/firmware fails
+                            (an apt failure always stops the run)
+  --ignore-stability        Do not exit 2 on failed units, pending reboot, or
+                            dpkg errors
+  --restart-services        Auto-restart services (needrestart mode a); risky
+  --log-file PATH           Log file (default: /tmp/ubuntu-maintain.<uid>.log)
+  -h, --help                Show this help
 
 Environment:
-  UPDATE_APPLY=1          Same as --apply
+  UPDATE_APPLY=1            Same as --apply
 
 Examples:
-  ubuntu-maintain                    # dry-run manifest
-  ubuntu-maintain --apply            # routine safe update
-  ubuntu-maintain --apply --mode monthly --aggressive
+  ubuntu-maintain                          # dry run: what would change
+  ubuntu-maintain --mode monthly           # preview the monthly cleanup
+  ubuntu-maintain --apply                  # routine update
+  ubuntu-maintain --apply --mode monthly   # update and clean up
 
 Exit codes:
   0   success

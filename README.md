@@ -66,7 +66,7 @@ ubuntu-maintain --apply --ignore-stability # do not exit 2 for known, unrelated 
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `--apply`                  | Make changes. Without it, everything is a dry run.                                                                                    |
 | `--mode daily\|monthly`    | `daily` (default) upgrades only; `monthly` adds the cleanup above.                                                                    |
-| `--aggressive`             | Use `apt-get dist-upgrade`, which may remove packages.                                                                                |
+| `--aggressive`             | Use `apt-get dist-upgrade`, and allow a monthly autoremove of more than 25 packages. Both may remove packages.                        |
 | `--manifest-only`          | Print the manifest and exit.                                                                                                          |
 | `--with-topgrade`          | Run [topgrade](https://github.com/topgrade-rs/topgrade) after the system package managers.                                            |
 | `--continue-on-pm-failure` | Keep going after a snap, flatpak, topgrade, or firmware failure. The exit code still reports it. An apt failure always stops the run. |

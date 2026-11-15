@@ -1358,3 +1358,17 @@ fw_apply() {
   run um_fw_confirm 2 "${TEST_TMP}/typeahead"
   [ "$status" -ne 0 ]
 }
+
+@test "help explains monthly cleanup, the autoremove limit and the firmware rule" {
+  um_cli --help
+  [[ "$output" == *"ubuntu-maintain --mode monthly"*"# preview the monthly cleanup"* ]]
+  [[ "$output" == *"(over 25 packages)"* ]]
+  [[ "$output" == *"only after you answer y on a terminal"* ]]
+}
+
+@test "help keeps the usual layout and fits 80 columns" {
+  um_cli --help
+  [ "$(awk 'length > 80' <<<"$output" | wc -l)" -eq 0 ]
+  # Sections in the usual order.
+  [ "$(grep -E '^(Usage|Options|Environment|Examples|Exit codes):' <<<"$output" | cut -d: -f1 | paste -sd,)" = "Usage,Options,Environment,Examples,Exit codes" ]
+}
