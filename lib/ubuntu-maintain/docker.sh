@@ -265,8 +265,8 @@ um_probe_docker() {
   fi
   sock="$(um_docker_sock)"
   UM_CAP[docker_running]=0
-  if [[ "$sock" == /run/docker.sock ]] && um_docker_has_systemd \
-      && ! systemctl is-active --quiet docker.service 2>/dev/null; then
+  # With docker.socket enabled, any call would start the daemon: ask systemd first.
+  if um_docker_has_systemd && ! systemctl is-active --quiet docker.service 2>/dev/null; then
     return 0
   fi
   [[ -S "$sock" ]] || return 0

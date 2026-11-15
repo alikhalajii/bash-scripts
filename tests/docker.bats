@@ -198,12 +198,26 @@ assert_readonly_calls() {
   touch "$TEST_TMP/.dockerenv"; UM_DOCKER_CONTAINER_FILES="$TEST_TMP/.dockerenv" um_docker_in_container
 }
 
-@test "docker probe: inactive service never calls docker" {
-  fake_docker; unset UM_DOCKER_SOCK; um_docker_has_systemd() { return 0; }
-  fake_bin systemctl 'exit 3'
+# systemctl stub: logs its arguments; only docker.service is inactive (docker.socket is
+# active, so any docker call would start the daemon).
+systemctl_service_inactive() {
+  fake_bin systemctl "printf '%s\\n' \"\$*\" >> '${TEST_TMP}/systemctl.calls'
+[ \"\$*\" = 'is-active --quiet docker.service' ] && exit 3
+exit 0"
+}
+
+@test "docker probe: inactive service with an active socket never calls docker" {
+  fake_docker; um_docker_has_systemd() { return 0; }; systemctl_service_inactive
   um_probe_docker
   [ "${UM_CAP[docker_running]}" = 0 ]
   [ ! -s "$TEST_TMP/dk/calls" ]
+  [ "$(cat "$TEST_TMP/systemctl.calls")" = "is-active --quiet docker.service" ]
+}
+
+@test "docker probe: active service is read" {
+  fake_docker; um_docker_has_systemd() { return 0; }; fake_bin systemctl 'exit 0'
+  um_probe_docker
+  [ "${UM_CAP[docker_running]}" = 1 ]
 }
 
 @test "docker probe: no socket means not running, without calling docker" {
