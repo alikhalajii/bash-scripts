@@ -1351,3 +1351,10 @@ fw_apply() {
   run um_have_tty < /dev/null
   [ "$status" -ne 0 ]
 }
+
+@test "firmware: input typed before the question is discarded, not taken as the answer" {
+  source "${UM_LIB}/firmware.sh"
+  printf 'y\n' > "${TEST_TMP}/typeahead"
+  run um_fw_confirm 2 "${TEST_TMP}/typeahead"
+  [ "$status" -ne 0 ]
+}

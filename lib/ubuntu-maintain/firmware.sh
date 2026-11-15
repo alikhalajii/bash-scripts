@@ -28,9 +28,15 @@ um_have_tty() {
 }
 
 # um_fw_confirm N [INPUT]: ask once; 0 only for y/Y. No answer within 5 minutes is a no.
+# Keys typed before the question (e.g. during the apt output) are discarded first, so only
+# an answer given after reading the question counts.
 um_fw_confirm() {
-  local n="$1" input="${2:-/dev/tty}" answer=""
-  if ! read -r -t 300 -p "Install ${n} firmware update(s) now? A restart may be needed to finish. [y/N] " answer <"$input"; then
+  local n="$1" input="${2:-/dev/tty}" answer="" fd rc=0
+  exec {fd}<"$input" || return 1
+  while read -r -t 0.2 -u "$fd" _; do :; done
+  read -r -t 300 -u "$fd" -p "Install ${n} firmware update(s) now? A restart may be needed to finish. [y/N] " answer || rc=$?
+  exec {fd}<&-
+  if [[ "$rc" -ne 0 ]]; then
     printf '\n'
     um_log "No answer; firmware not installed."
     return 1
