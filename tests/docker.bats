@@ -351,6 +351,16 @@ exit 0"
   [[ "$output" == *"...tail42"* ]]
 }
 
+@test "docker collect: restart note only for a started container with restart always" {
+  fake_docker
+  # old-db: unless-stopped (a manual stop sticks); old-web: always but never started.
+  sed -i -e '/"\/old-db"/s/\talways\t/\tunless-stopped\t/' \
+         -e '/"\/old-web"/s/\tno\t/\talways\t/' "$TEST_TMP/dk/containers.tsv"
+  collect
+  [[ "${UM_DK_NOTE[*]}" != *"restarts when Docker restarts"* ]]
+  [[ "${UM_DK_NAME[*]} ${UM_DK_NOTE[*]}" != *"restarts when Docker restarts"* ]]
+}
+
 @test "docker render: header, groups, notes, kept line, volumes" {
   fake_docker; collect; run um_docker_render
   [[ "${lines[0]}" == "Docker: 7 item(s) can be removed, at least 2.1 GB." ]]

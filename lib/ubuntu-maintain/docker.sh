@@ -450,7 +450,9 @@ um_docker_collect() {
     if [[ "$k" == True ]]; then name+=" [compose run leftover]"
     elif [[ -n "$proj" ]]; then name+=" [compose $(um_docker_safe_text "$proj" 60)]"; fi
     c_name[$id]="$name"
-    case "${f[5]}" in always | unless-stopped) c_note[$id]="(restarts when Docker restarts)" ;; esac
+    # Only "always" brings back a container that was stopped by hand, and only one that has
+    # run before (Docker starts it again on its own start).
+    [[ "${f[5]}" == always && "${f[2]}" != 0001-* ]] && c_note[$id]="(restarts when Docker restarts)"
     [[ "$tag" =~ $UM_DK_RE_IMAGE ]] && tag="<none> ${tag:7:12}"
     c_from[$id]="$(um_docker_safe_text "$tag" 200)"
   done < "$d/ct"
