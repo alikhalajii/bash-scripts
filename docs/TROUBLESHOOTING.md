@@ -115,7 +115,7 @@ To keep a package, mark it as manually installed first: `sudo apt-mark manual <p
 Notes (nothing is listed or removed):
 
 - **`Docker: not running; skipped`:** `docker.service` is not active. The tool never starts Docker to look at it. Start it with `sudo systemctl start docker`, then run again.
-- **`note: could not read Docker without root; run with --apply to list it`:** your user cannot reach `/run/docker.sock`. Run `ubuntu-maintain --apply --mode monthly`: it lists as root and still removes nothing without your answer.
+- **`note: your user cannot read Docker; to list it as root (changes nothing):`:** your user has no access to `/run/docker.sock`. Run the command shown below the note, `sudo "$(command -v ubuntu-maintain)" --mode monthly`: a dry run as root that lists the Docker items and changes nothing (the full path is needed because `sudo` does not search `~/.local/bin`).
 - **`note: could not read Docker (...)`:** Docker answered with an error or took too long; the text in brackets is Docker's. Check `sudo docker info`.
 - **`note: Docker from snap is not supported here`:** the snap's Docker keeps its data inside the snap. `sudo docker system df` shows what uses space; remove items with Docker's own commands.
 - **`note: inside a container; Docker cleanup skipped`:** a Docker socket mounted into a container belongs to the host, so cleaning from inside would clean the host. Run the tool on the host.

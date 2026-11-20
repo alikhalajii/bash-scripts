@@ -7,7 +7,8 @@
 #           under "state helpers" below; variants in state-*/ replace single files);
 #           writes `calls` (one line per call, arguments TAB-joined, newlines as \n) and
 #           `forbidden` (any call docker.sh must never make: exit 99). A file fail-<cmd> or
-#           fail-<cmd>-<sub> (e.g. fail-image, fail-container-rm) makes that call fail;
+#           fail-<cmd>-<sub> (e.g. fail-image, fail-container-rm) makes that call fail
+#           (its first line, if any, is the error text);
 #           fail-once-<cmd>-<sub> only the next such call. An executable hook-ntags runs
 #           after answering a tag-count inspect.
 # Example:  tests/docker.bats copies this file next to a state copy: fake_docker [variant]
@@ -34,7 +35,10 @@ log_call "$@"
 # shellcheck source=../../../lib/ubuntu-maintain/docker.sh
 source "$(cat "$dir/libdir")/docker.sh"
 S="$UM_DK_SEP"
-[[ -e "$dir/fail-${1:-}" || -e "$dir/fail-${1:-}-${2:-}" ]] && fail "injected failure"
+for f in "$dir/fail-${1:-}" "$dir/fail-${1:-}-${2:-}"; do
+  # The file's first line, if any, is the daemon's error text.
+  [[ -e "$f" ]] && { IFS= read -r msg < "$f" || true; fail "${msg:-injected failure}"; }
+done
 if [[ -e "$dir/fail-once-${1:-}-${2:-}" ]]; then rm -f "$dir/fail-once-${1:-}-${2:-}"; fail "injected failure, once"; fi
 
 # --- state helpers ---------------------------------------------------------

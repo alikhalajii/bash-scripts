@@ -251,16 +251,17 @@ um_docker_in_container() {
   return 1
 }
 
-# Sets UM_CAP docker_available (0/1), docker_running (1/0/unknown/n/a), docker_note, and in
-# monthly mode with a reachable daemon fills UM_DK_* (um_docker_collect) and the counts
-# docker_removable_images / docker_stopped_containers (else n/a). Never starts the daemon:
-# with systemd, docker.service must already be active. Run it in the main shell.
 um_docker_probe_reset() {
-  UM_CAP[docker_available]=0 UM_CAP[docker_running]=n/a UM_CAP[docker_note]=""
+  UM_CAP[docker_available]=0 UM_CAP[docker_running]=n/a UM_CAP[docker_note]="" UM_CAP[docker_hint]=""
   UM_CAP[docker_removable_images]=n/a UM_CAP[docker_stopped_containers]=n/a
 }
+# Sets UM_CAP docker_available (0/1), docker_running (1/0/unknown/n/a), docker_note (why
+# the phase is skipped) and docker_hint (a command to run next, shown under the note), and
+# in monthly mode with a reachable daemon fills UM_DK_* (um_docker_collect) and the counts
+# docker_removable_images / docker_stopped_containers (else n/a). Never starts the daemon:
+# with systemd, docker.service must already be active. Run it in the main shell.
 um_probe_docker() {
-  local rc=0 sock i ni=0 nc=0
+  local rc=0 sock i ni=0 nc=0 err
   um_docker_probe_reset
   um_docker_bin > /dev/null || rc=$?
   if [[ "$rc" -ne 0 && -e "$(um_docker_snap_bin)" ]]; then
@@ -285,12 +286,15 @@ um_probe_docker() {
     return 0
   fi
   [[ -S "$sock" ]] || return 0
-  if ! um_docker_cmd version --format '{{.Server.Version}}' > /dev/null 2>&1; then
+  if ! err="$(um_docker_cmd version --format '{{.Server.Version}}' 2>&1 >/dev/null)"; then
     UM_CAP[docker_running]=unknown
-    if um_docker_is_root; then
-      UM_CAP[docker_note]="could not read Docker"
+    # Only a permission error means "try as root"; anything else is shown as Docker said it.
+    if ! um_docker_is_root && [[ "${err,,}" == *"permission denied"* ]]; then
+      UM_CAP[docker_note]="your user cannot read Docker; to list it as root (changes nothing):"
+      # shellcheck disable=SC2016  # a command for the user to copy, not to expand here
+      UM_CAP[docker_hint]='sudo "$(command -v ubuntu-maintain)" --mode monthly'
     else
-      UM_CAP[docker_note]="could not read Docker without root; run with --apply to list it"
+      UM_CAP[docker_note]="could not read Docker (${err:-no answer})"
     fi
     return 0
   fi
@@ -765,6 +769,7 @@ um_docker_phase() {
   # Re-read under --apply: earlier phases (topgrade) may have pulled images.
   if [[ "${UM_APPLY}" -eq 1 ]] && ! um_docker_collect; then
     um_log "note: ${UM_CAP[docker_note]}"
+    [[ -z "${UM_CAP[docker_hint]:-}" ]] || um_log "  ${UM_CAP[docker_hint]}"
     return 0
   fi
   if [[ "${UM_DK_BAD:-0}" -gt 0 ]]; then

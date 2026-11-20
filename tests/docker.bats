@@ -226,10 +226,21 @@ exit 0"
   [ ! -s "$TEST_TMP/dk/calls" ]
 }
 
-@test "docker probe: unreadable daemon as non-root suggests --apply, never the group" {
-  fake_docker; touch "$TEST_TMP/dk/fail-version"; um_probe_docker
-  [ "${UM_CAP[docker_note]}" = "could not read Docker without root; run with --apply to list it" ]
+@test "docker probe: permission denied as non-root points to a root dry run, never the group" {
+  fake_docker
+  printf 'permission denied while trying to connect to the Docker daemon socket\n' > "$TEST_TMP/dk/fail-version"
+  um_probe_docker
+  [ "${UM_CAP[docker_note]}" = "your user cannot read Docker; to list it as root (changes nothing):" ]
+  [ "${UM_CAP[docker_hint]}" = 'sudo "$(command -v ubuntu-maintain)" --mode monthly' ]
   [ "${UM_CAP[docker_running]}" = unknown ]
+}
+
+@test "docker probe: any other daemon error is shown as it is, without a root hint" {
+  fake_docker
+  printf 'Cannot connect to the Docker daemon. Is the docker daemon running?\n' > "$TEST_TMP/dk/fail-version"
+  um_probe_docker
+  [ "${UM_CAP[docker_note]}" = "could not read Docker (Error response from daemon: Cannot connect to the Docker daemon. Is the docker daemon running?)" ]
+  [ -z "${UM_CAP[docker_hint]}" ]
 }
 
 @test "docker probe: daily mode checks the daemon but never reads disk usage" {
@@ -612,10 +623,13 @@ image	rm	--	${UM_DK_ID[5]}" ]
   [[ "$output" == *"=== Docker ==="*"Docker: not running; skipped"* ]]
 }
 
-@test "docker phase: a note is shown and nothing is read" {
-  fake_docker; touch "$TEST_TMP/dk/fail-version"; export UM_MODE=monthly; um_probe_docker
+@test "docker phase: a note and its hint are shown and nothing is read" {
+  fake_docker
+  printf 'permission denied while trying to connect to the Docker daemon socket\n' > "$TEST_TMP/dk/fail-version"
+  export UM_MODE=monthly; um_probe_docker
   run um_docker_phase
-  [[ "$output" == *"note: could not read Docker without root; run with --apply to list it"* ]]
+  [[ "$output" == *"note: your user cannot read Docker; to list it as root (changes nothing):"$'\n''  sudo "$(command -v ubuntu-maintain)" --mode monthly'* ]]
+  [ "$(awk 'length > 80' <<<"$output" | wc -l)" -eq 0 ]
   run ! grep -q '^system' "$TEST_TMP/dk/calls"
 }
 
