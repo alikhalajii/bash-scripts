@@ -78,6 +78,14 @@ assert_readonly_calls() {
   run um_docker_size_bytes '649MB (60%)'; [ "$output" = 649000000 ]
 }
 
+@test "docker size: Docker's 3-digit rounding (1e+03) is read" {
+  run um_docker_size_bytes 1e+03kB;  [ "$output" = 1000000 ]
+  run um_docker_size_bytes 1e+03MB;  [ "$output" = 1000000000 ]
+  run um_docker_size_bytes 1.5e+02B; [ "$output" = 150 ]
+  for s in 1e+04MB 1e-03MB 1e+3MB e+03MB 1e+03; do
+    run um_docker_size_bytes "$s"; [ "$status" -eq 1 ]; done
+}
+
 @test "docker size: anything else is unknown" {
   local s
   for s in N/A '' 12 1.2.3MB 5MiB -1MB 1e3MB '$(id)MB' 9999999999999MB 999999999999TB; do

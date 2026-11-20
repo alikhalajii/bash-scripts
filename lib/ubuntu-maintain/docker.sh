@@ -105,10 +105,17 @@ um_docker_cmd() {
   return "$_um_rc"
 }
 
-# um_docker_size_bytes STR: Docker's decimal size ("846kB", "120.2MB", "649MB (60%)") as
-# bytes. Returns 1 for anything else ("N/A", binary units, too large).
+# um_docker_size_bytes STR: Docker's decimal size ("846kB", "120.2MB", "649MB (60%)",
+# "1e+03kB" from its 3-digit rounding) as bytes. Returns 1 for anything else ("N/A",
+# binary units, too large).
 um_docker_size_bytes() {
-  local s="${1%% *}" int frac unit mult
+  local s="${1%% *}" int frac unit mult digits
+  # Shift the decimal point: 1.5e+02B -> 150B.
+  if [[ "$s" =~ ^([0-9])(\.([0-9]{1,6}))?e\+0([0-3])(B|kB|MB|GB|TB)$ ]]; then
+    digits="${BASH_REMATCH[3]}000" int="${BASH_REMATCH[4]}" unit="${BASH_REMATCH[5]}"
+    frac="${digits:int}"; while [[ "$frac" == *0 ]]; do frac="${frac%0}"; done
+    s="${BASH_REMATCH[1]}${digits:0:int}${frac:+.${frac:0:6}}${unit}"
+  fi
   [[ "$s" =~ ^([0-9]{1,12})(\.([0-9]{1,6}))?(B|kB|MB|GB|TB)$ ]] || return 1
   int="${BASH_REMATCH[1]}" frac="${BASH_REMATCH[3]}000000" unit="${BASH_REMATCH[4]}"
   case "$unit" in
