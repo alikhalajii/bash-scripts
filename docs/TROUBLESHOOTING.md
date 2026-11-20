@@ -110,6 +110,24 @@ To keep a package, mark it as manually installed first: `sudo apt-mark manual <p
 - **`note: this fwupd version cannot install without asking its own questions`:** older fwupd (18.04/20.04) lacks the options that turn off its other prompts. Use `sudo fwupdmgr update`.
 - **Firmware phase failed (exit 14):** run `sudo fwupdmgr update` to see fwupd's error. Common causes are battery below the required level or no AC power.
 
+## Docker section: notes and warnings
+
+Notes (nothing is listed or removed):
+
+- **`Docker: not running; skipped`:** `docker.service` is not active. The tool never starts Docker to look at it. Start it with `sudo systemctl start docker`, then run again.
+- **`note: your user cannot read Docker; to list it as root (changes nothing):`:** your user has no access to `/run/docker.sock`. Run the command shown below the note, `sudo "$(command -v ubuntu-maintain)" --mode monthly`: a dry run as root that lists the Docker items and changes nothing (the full path is needed because `sudo` does not search `~/.local/bin`).
+- **`note: could not read Docker (...)`:** Docker answered with an error or took too long; the text in brackets is Docker's. Check `sudo docker info`.
+- **`note: Docker from snap is not supported here`:** the snap's Docker keeps its data inside the snap. `sudo docker system df` shows what uses space; remove items with Docker's own commands.
+- **`note: inside a container; Docker cleanup skipped`:** a Docker socket mounted into a container belongs to the host, so cleaning from inside would clean the host. Run the tool on the host.
+- **`note: other users can change the docker program; Docker cleanup skipped`:** the `docker` program belongs to a user other than root, or its group or others may write it. Reinstall Docker, or fix it: `sudo chown root:root "$(command -v docker)" && sudo chmod go-w "$(command -v docker)"`.
+
+Warnings after you answered `y` (that item was not removed; run again to see the current list):
+
+- **`... changed since the list; not removed`**, **`... not removed: ... now points to another image`**, **`... is gone; skipped`:** the container or image changed between the list and your answer, for example a container was started or a tag was pulled again.
+- **`... kept: container ... was not removed`:** the image needs that stopped container, which was not removed, so Docker would refuse it.
+- **`could not remove ...: <Docker's message>`:** Docker refused, usually because a container uses the image.
+- **`warning: Docker: N record(s) could not be read; those items are not listed`:** Docker printed something unexpected for those items. They are left out, and so is any image such a container uses.
+
 ## Services restarted after updates (Ubuntu 24.04+)
 
 Since Ubuntu 24.04, `needrestart` restarts affected services automatically when apt runs it, also outside `--restart-services`. To keep a service from being restarted, add a regular expression matching it to `$nrconf{override_rc}` in a file under `/etc/needrestart/conf.d/`.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # common.sh — Flags, exit codes, CLI parsing, logging and the library loader.
 # Provides: um_parse_args, um_log, um_section, um_die, um_sudo, um_setup_logging,
-#           um_source_libs, UM_CAP (shared state), UM_EXIT_* codes
+#           um_source_libs, um_have_tty, um_tty_read_line, um_tty_timeout,
+#           UM_CAP (shared state), UM_EXIT_* codes
 # Example:  um_log "warning: disk almost full"   # printed, and repeated in the Result block
 # Sourced by: bin/ubuntu-maintain (not executed directly)
 
@@ -53,6 +54,38 @@ um_log() {
 
 um_section() {
   printf '\n=== %s ===\n' "$1"
+}
+
+# A person is there to answer: stdin is a terminal and a controlling terminal can be opened
+# (false from a timer, cron, or sudo started without a terminal).
+um_have_tty() {
+  [[ -t 0 ]] && { : </dev/tty; } 2>/dev/null
+}
+
+# Seconds a terminal question waits: UM_TTY_TIMEOUT if it is a positive integer (tests),
+# else 300.
+um_tty_timeout() {
+  local t="${UM_TTY_TIMEOUT:-}"
+  [[ "$t" =~ ^[1-9][0-9]*$ ]] || t=300
+  printf '%s\n' "$t"
+}
+
+# um_tty_read_line PROMPT VAR [INPUT]: ask once on INPUT (default /dev/tty) and store the
+# line in VAR (a plain variable name, not starting with _um_). Keys typed before the
+# question are discarded first, so only an answer given after reading it counts.
+# Returns 1 on no answer within um_tty_timeout, EOF, an unopenable INPUT or a bad VAR.
+um_tty_read_line() {
+  local _um_prompt="$1" _um_var="$2" _um_in="${3:-/dev/tty}" _um_line="" _um_fd _um_rc=0
+  [[ "$_um_var" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && "$_um_var" != _um_* ]] || return 1
+  exec {_um_fd}<"$_um_in" || return 1
+  while read -r -t 0.2 -u "$_um_fd" _; do :; done
+  read -r -t "$(um_tty_timeout)" -u "$_um_fd" -p "$_um_prompt" _um_line || _um_rc=$?
+  exec {_um_fd}<&-
+  if [[ "$_um_rc" -ne 0 ]]; then
+    printf '\n'   # end the prompt line before the caller's message
+    return 1
+  fi
+  printf -v "$_um_var" '%s' "$_um_line"
 }
 
 # Safety check: um_reexec_as_root_if_apply (bin/ubuntu-maintain) handles re-exec before um_run_dag
@@ -116,15 +149,16 @@ ubuntu-maintain ${UM_VERSION} — safe, probe-driven Ubuntu/Debian maintenance
 
 Usage: ubuntu-maintain [OPTIONS]
 
-Without --apply nothing is changed. Firmware updates (fwupd) are reported on
-every run and installed only after you answer y on a terminal, never from cron.
+Without --apply nothing is changed. Firmware updates and Docker removals are
+listed first and done only after you answer y on a terminal, never from cron.
 
 Options:
   --apply                   Make changes (default: dry run)
   --mode daily|monthly      daily (default): updates only; monthly: also clean
                             up (autoremove, apt cache, leftover configs, old
                             snap revisions, unused flatpak runtimes, journal
-                            over 500M), previewed by a dry run
+                            over 500M, Docker items you pick), previewed by a
+                            dry run
   --aggressive              Allow apt dist-upgrade and large autoremoves
                             (over 25 packages); both may remove packages
   --manifest-only           Print the manifest and exit
@@ -259,6 +293,8 @@ um_source_libs() {
   source "${UM_LIB_DIR}/topgrade.sh"
   # shellcheck source=firmware.sh
   source "${UM_LIB_DIR}/firmware.sh"
+  # shellcheck source=docker.sh
+  source "${UM_LIB_DIR}/docker.sh"
   # shellcheck source=summary.sh
   source "${UM_LIB_DIR}/summary.sh"
   # shellcheck source=dag.sh

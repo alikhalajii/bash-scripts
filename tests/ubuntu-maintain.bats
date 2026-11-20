@@ -3,42 +3,9 @@
 # `run !` (negative assertions) needs bats >= 1.5; the pre-commit hook pins 1.13.
 bats_require_minimum_version 1.5.0
 
-setup() {
-  export ROOT="${BATS_TEST_DIRNAME}/.."
-  export UM_LIB="${ROOT}/lib/ubuntu-maintain"
-  # shellcheck source=../lib/ubuntu-maintain/common.sh
-  source "${UM_LIB}/common.sh"
-  source "${UM_LIB}/probe.sh"
-  source "${UM_LIB}/manifest.sh"
-  export UM_APPLY=0
-  export UM_AGGRESSIVE=0
-  export UM_MODE="daily"
-  # Keep the real /tmp clean: logs and temp dirs from tests go here.
-  TEST_TMP="$(mktemp -d)"
-  export TEST_TMP TMPDIR="$TEST_TMP"
-  # Restart checks read /boot and /proc: use empty fakes so results do not depend on the host.
-  mkdir -p "${TEST_TMP}/boot" "${TEST_TMP}/proc"
-  export UM_BOOT_DIR="${TEST_TMP}/boot" UM_PROC_DIR="${TEST_TMP}/proc" UM_DMI_DIR="${TEST_TMP}/dmi"
-  # Never reach the real fwupd daemon (slow, host-dependent): firmware tests replace this.
-  fake_bin fwupdmgr 'exit 1'
-}
-
-teardown() {
-  rm -rf "$TEST_TMP"
-}
-
-# fake_bin NAME BODY: put an executable NAME (bash script BODY) first on PATH.
-fake_bin() {
-  mkdir -p "${TEST_TMP}/bin"
-  printf '#!/bin/bash\n%s\n' "$2" > "${TEST_TMP}/bin/$1"
-  chmod +x "${TEST_TMP}/bin/$1"
-  case ":${PATH}:" in *":${TEST_TMP}/bin:"*) ;; *) export PATH="${TEST_TMP}/bin:${PATH}" ;; esac
-}
-
-# Run the CLI with a throwaway log instead of the user's real /tmp/ubuntu-maintain.<uid>.log.
-um_cli() {
-  run "${ROOT}/bin/ubuntu-maintain" --log-file "${TEST_TMP}/um.log" "$@"
-}
+# A plain source (not bats `load`) so shellcheck follows it to the sourced libs.
+# shellcheck source=test_helper.bash
+source "${BATS_TEST_DIRNAME}/test_helper.bash"
 
 @test "help exits zero" {
   um_cli --help
@@ -1361,10 +1328,52 @@ fw_apply() {
   [ "$status" -ne 0 ]
 }
 
+@test "tty helper: a line typed after the prompt is returned" {
+  mkfifo "${TEST_TMP}/in"; exec 7<>"${TEST_TMP}/in"
+  ( sleep 1; printf '2 4\n' >&7 ) 3>&- &
+  local ans=""
+  UM_TTY_TIMEOUT=10 um_tty_read_line "Pick: " ans "${TEST_TMP}/in"
+  exec 7>&-
+  [ "$ans" = "2 4" ]
+}
+
+@test "tty helper: input waiting before the prompt is discarded" {
+  printf 'y\n' > "${TEST_TMP}/typeahead"
+  run um_tty_read_line "Q? " ans "${TEST_TMP}/typeahead"
+  [ "$status" -eq 1 ]
+}
+
+@test "tty helper: no answer within the time limit returns 1" {
+  mkfifo "${TEST_TMP}/in"; exec 7<>"${TEST_TMP}/in"
+  UM_TTY_TIMEOUT=1 run um_tty_read_line "Q? " ans "${TEST_TMP}/in"
+  exec 7>&-
+  [ "$status" -eq 1 ]
+}
+
+@test "tty helper: an invalid time limit falls back to the default" {
+  UM_TTY_TIMEOUT=0 run um_tty_timeout; [ "$output" = 300 ]
+  UM_TTY_TIMEOUT='1;id' run um_tty_timeout; [ "$output" = 300 ]
+  UM_TTY_TIMEOUT=7 run um_tty_timeout; [ "$output" = 7 ]
+}
+
+@test "tty helper: an unsafe variable name is refused" {
+  run um_tty_read_line "Q? " 'a[$(id)]' /dev/null
+  [ "$status" -eq 1 ]
+  run um_tty_read_line "Q? " _um_x /dev/null
+  [ "$status" -eq 1 ]
+}
+
 @test "help explains monthly cleanup, the autoremove limit and the firmware rule" {
   um_cli --help
   [[ "$output" == *"ubuntu-maintain --mode monthly"*"# preview the monthly cleanup"* ]]
   [[ "$output" == *"(over 25 packages)"* ]]
+  [[ "$output" == *"only after you answer y on a terminal"* ]]
+}
+
+@test "help mentions Docker items in the monthly cleanup and the answer rule" {
+  um_cli --help
+  [[ "$output" == *"Docker items you pick"* ]]
+  [[ "$output" == *"Firmware updates and Docker removals"* ]]
   [[ "$output" == *"only after you answer y on a terminal"* ]]
 }
 

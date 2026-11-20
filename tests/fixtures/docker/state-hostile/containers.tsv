@@ -1,0 +1,4 @@
+c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2	exited	2026-05-01T08:00:00.5Z	2026-05-02T09:30:00.123456789Z	sha256:d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2	always	"/old\u001b]0;x\u0007db"	"shop\u001fx"	"False"	"demo/db:2"	12MB
+cacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacaca	running	2026-11-01T07:00:00Z	0001-01-01T00:00:00Z	sha256:abababababababababababababababababababababababababababababababab	unless-stopped	"/app-1"	""	""	"demo/app:1"	1MB
+c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1	created	0001-01-01T00:00:00Z	0001-01-01T00:00:00Z	sha256:d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2	no	"/old-web"	""	""	"demo/db:2"	0B
+cfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcfcf	exited	0001-01-01T00:00:00Z	0001-01-01T00:00:00Z	sha256:d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2	no	"/broken"	0B
