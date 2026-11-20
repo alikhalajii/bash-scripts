@@ -91,8 +91,11 @@ um_docker_cmd() {
   local _um_t=60 _um_bin _um_dir _um_rc=0 _um_err=""
   if [[ "${1:-}" == --slow ]]; then _um_t=300; shift; fi
   _um_bin="$(um_docker_bin)" || { printf 'docker program not usable\n' >&2; return 125; }
-  _um_dir="$(um_docker_tmpdir)" && mkdir "$_um_dir/cfg" \
+  _um_dir="$(um_docker_tmpdir)" \
     || { printf 'cannot create a private temporary directory\n' >&2; return 125; }
+  mkdir "$_um_dir/cfg" || {
+    rm -rf -- "$_um_dir"
+    printf 'cannot create a private temporary directory\n' >&2; return 125; }
   /usr/bin/env -i PATH="$UM_DK_PATH" LC_ALL=C DOCKER_CONFIG="$_um_dir/cfg" \
     DOCKER_HOST="unix://$(um_docker_sock)" \
     /usr/bin/timeout -k 5 "$_um_t" "$_um_bin" "$@" </dev/null 2>"$_um_dir/err" || _um_rc=$?
@@ -769,6 +772,7 @@ um_docker_phase() {
   um_section "Docker"
   if [[ -n "${UM_CAP[docker_note]:-}" ]]; then
     um_log "note: ${UM_CAP[docker_note]}"
+    [[ -z "${UM_CAP[docker_hint]:-}" ]] || um_log "  ${UM_CAP[docker_hint]}"
     return 0
   fi
   if [[ "${UM_CAP[docker_running]:-0}" != 1 ]]; then
@@ -778,7 +782,6 @@ um_docker_phase() {
   # Re-read under --apply: earlier phases (topgrade) may have pulled images.
   if [[ "${UM_APPLY}" -eq 1 ]] && ! um_docker_collect; then
     um_log "note: ${UM_CAP[docker_note]}"
-    [[ -z "${UM_CAP[docker_hint]:-}" ]] || um_log "  ${UM_CAP[docker_hint]}"
     return 0
   fi
   if [[ "${UM_DK_BAD:-0}" -gt 0 ]]; then

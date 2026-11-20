@@ -86,6 +86,17 @@ assert_readonly_calls() {
     run um_docker_size_bytes "$s"; [ "$status" -eq 1 ]; done
 }
 
+@test "docker wrapper: a temp dir it cannot finish setting up is removed" {
+  mkdir "$TEST_TMP/t"; export TMPDIR="$TEST_TMP/t"
+  printf '#!/bin/bash\n' > "$TEST_TMP/docker"; chmod 755 "$TEST_TMP/docker"
+  export UM_DOCKER_BIN="$TEST_TMP/docker"
+  mkdir() { return 1; }
+  run um_docker_cmd info
+  unset -f mkdir
+  [ "$status" -eq 125 ]
+  [ -z "$(ls -A "$TEST_TMP/t")" ]
+}
+
 @test "docker size: anything else is unknown" {
   local s
   for s in N/A '' 12 1.2.3MB 5MiB -1MB 1e3MB '$(id)MB' 9999999999999MB 999999999999TB; do
