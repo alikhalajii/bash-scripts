@@ -4,7 +4,9 @@
 Purpose:  run CMD with a pty as its terminal, wait for "Remove which?", pick the numbered
           lines whose name is one of --pick, check that the confirmation repeats exactly
           those, then answer --confirm (y, n, or none = let the question time out).
-Provides: exit 0 when every check passed and CMD exited 0; else a message and exit 1.
+          Fails if a name in --absent is offered or CMD prints a "warning:".
+Provides: exit 0 when every check passed and CMD exited 0; else a message and exit 1
+          (a hung CMD is killed).
 Example:  pty_drive.py --marker e2e/m-1:1 --pick e2e/a:1,gone --confirm y -- bash -c '...'
           (used by tests/e2e/docker-dind.sh; standard library only)
 """
@@ -14,6 +16,7 @@ import os
 import pty
 import re
 import select
+import signal
 import sys
 import time
 
@@ -21,7 +24,15 @@ WAIT = 30  # seconds to wait for each prompt
 ITEM = re.compile(r"^\s*(\d+)  .{6}  .{10}  (.*)$")
 
 
+CHILD = None
+
+
 def fail(msg, out):
+    if CHILD is not None:
+        try:
+            os.killpg(CHILD.pid, signal.SIGKILL)  # the pty child leads its own session
+        except ProcessLookupError:
+            pass
     sys.stdout.write(out)
     sys.stderr.write(f"pty_drive: {msg}\n")
     sys.exit(1)
@@ -73,12 +84,14 @@ def main():
     ap.add_argument("--pick", default="", help="comma-separated names; empty = no answer")
     ap.add_argument("--confirm", choices=["y", "n", "none"], required=True)
     ap.add_argument("--marker", required=True, help="an image that must be listed")
+    ap.add_argument("--absent", default="", help="comma-separated names never offered")
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     args = ap.parse_args()
     cmd = args.cmd[1:] if args.cmd[:1] == ["--"] else args.cmd
     picks = [p for p in args.pick.split(",") if p]
 
-    child = Child(cmd)
+    global CHILD
+    child = CHILD = Child(cmd)
     listing = child.read_until("Remove which?")
     if listing is None:
         fail("no picker question", child.out)
@@ -89,6 +102,9 @@ def main():
             items.setdefault(name_of(m.group(2)), []).append(m.group(1))
     if args.marker not in items:
         fail(f"marker {args.marker} not listed: not the test daemon?", child.out)
+    for name in filter(None, args.absent.split(",")):
+        if name in items:
+            fail(f"{name} is offered but must never be", child.out)
 
     if not picks:
         if child.read_until("No answer; nothing removed.") is None:
@@ -115,9 +131,12 @@ def main():
             fail(f"expected '{expect}'", child.out)
 
     rc = child.wait()
+    CHILD = None
     sys.stdout.write(child.out)
     if rc != 0:
         fail(f"command exited {rc}", "")
+    if "warning:" in child.out:
+        fail("the run printed a warning", "")
 
 
 if __name__ == "__main__":
