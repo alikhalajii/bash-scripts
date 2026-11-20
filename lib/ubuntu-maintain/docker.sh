@@ -152,7 +152,7 @@ um_docker_safe_text() {
   printf '%s\n' "$s"
 }
 
-# um_docker_json_str STR: decode one Go {{json}} string ("..."). \" \\ \/ and  -~
+# um_docker_json_str STR: decode one Go {{json}} string ("..."). \" \\ \/ and \u0020-\u007e
 # are decoded; every other escape and every non-ASCII byte becomes "?". Returns 1 if STR is
 # not exactly one JSON string.
 um_docker_json_str() {
@@ -272,7 +272,7 @@ um_probe_docker() {
   UM_CAP[docker_available]=1
   if [[ "$rc" -eq 2 ]]; then
     UM_CAP[docker_running]=unknown
-    UM_CAP[docker_note]="the docker program is writable by other users; Docker cleanup skipped"
+    UM_CAP[docker_note]="other users can change the docker program; Docker cleanup skipped"
     return 0
   fi
   if um_docker_in_container; then

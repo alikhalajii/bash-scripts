@@ -119,7 +119,7 @@ Notes (nothing is listed or removed):
 - **`note: could not read Docker (...)`:** Docker answered with an error or took too long; the text in brackets is Docker's. Check `sudo docker info`.
 - **`note: Docker from snap is not supported here`:** the snap's Docker keeps its data inside the snap. `sudo docker system df` shows what uses space; remove items with Docker's own commands.
 - **`note: inside a container; Docker cleanup skipped`:** a Docker socket mounted into a container belongs to the host, so cleaning from inside would clean the host. Run the tool on the host.
-- **`note: the docker program is writable by other users; Docker cleanup skipped`:** reinstall Docker, or fix the mode: `sudo chmod go-w "$(command -v docker)"`.
+- **`note: other users can change the docker program; Docker cleanup skipped`:** the `docker` program belongs to a user other than root, or its group or others may write it. Reinstall Docker, or fix it: `sudo chown root:root "$(command -v docker)" && sudo chmod go-w "$(command -v docker)"`.
 
 Warnings after you answered `y` (that item was not removed; run again to see the current list):
 

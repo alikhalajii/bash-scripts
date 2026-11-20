@@ -179,7 +179,7 @@ assert_readonly_calls() {
 
 @test "docker probe: unsafe binary is skipped with a note" {
   fake_docker; chmod 775 "$UM_DOCKER_BIN"; um_probe_docker
-  [[ "${UM_CAP[docker_note]}" == *"writable by other users"* ]]
+  [ "${UM_CAP[docker_note]}" = "other users can change the docker program; Docker cleanup skipped" ]
   [ ! -s "$TEST_TMP/dk/calls" ]; chmod 755 "$UM_DOCKER_BIN"
 }
 
